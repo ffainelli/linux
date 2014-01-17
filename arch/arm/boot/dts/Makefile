@@ -1207,3 +1207,25 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	aspeed-bmc-opp-zaius.dtb \
 	aspeed-bmc-portwell-neptune.dtb \
 	aspeed-bmc-quanta-q71l.dtb
+
+dtstree		:= $(srctree)/$(src)
+dtb-$(CONFIG_OF_ALL_DTBS) := $(patsubst $(dtstree)/%.dts,%.dtb, $(wildcard $(dtstree)/*.dts))
+
+always		:= $(dtb-y)
+clean-files	:= *.dtb
+
+builtindtb-$(CONFIG_ARCH_BCM_63XX)	+= bcm963138dvt
+
+obj-y	+= $(builtindtb-y).dtb.o
+targets	+= $(builtindtb-y).dtb
+
+.SECONDARY: $(obj)/$(builtindtb-y).dtb.S
+
+# *.dtb used to be generated in the directory above. Clean out the
+# old build results so people don't accidentally use them.
+dtbs: $(addprefix $(obj)/, $(dtb-y)) $(addprefix $(obj)/, $(builtindtb-y).dtb)
+	$(Q)rm -f $(obj)/../*.dtb
+
+clean-files := *.dtb *.dtb.S
+
+dtbs_install: $(addsuffix _dtbinst_, $(dtb-y))
