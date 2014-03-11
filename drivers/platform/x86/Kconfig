@@ -372,6 +372,12 @@ config SURFACE3_WMI
 	  To compile this driver as a module, choose M here: the module will
 	  be called surface3-wmi.
 
+config SCU
+	tristate "SCU driver"
+	depends on DMI
+	---help---
+	  Enable SCU driver
+
 config THINKPAD_ACPI
 	tristate "ThinkPad ACPI Laptop Extras"
 	depends on ACPI
