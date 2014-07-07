@@ -18,6 +18,7 @@
 #include <linux/phy_fixed.h>
 #include <linux/phylink.h>
 #include <linux/mii.h>
+#include <linux/clk.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
@@ -709,6 +710,9 @@ static int bcm_sf2_sw_suspend(struct dsa_switch *ds)
 			bcm_sf2_port_disable(ds, port, NULL);
 	}
 
+	if (!priv->wol_ports_mask)
+		clk_disable_unprepare(priv->clk);
+
 	return 0;
 }
 
@@ -716,6 +720,9 @@ static int bcm_sf2_sw_resume(struct dsa_switch *ds)
 {
 	struct bcm_sf2_priv *priv = bcm_sf2_to_priv(ds);
 	int ret;
+
+	if (!priv->wol_ports_mask)
+		clk_prepare_enable(priv->clk);
 
 	ret = bcm_sf2_sw_rst(priv);
 	if (ret) {
@@ -1106,10 +1113,16 @@ static int bcm_sf2_sw_probe(struct platform_device *pdev)
 		base++;
 	}
 
+	priv->clk = devm_clk_get(&pdev->dev, "sw_switch");
+	if (IS_ERR(priv->clk))
+		return PTR_ERR(priv->clk);
+
+	clk_prepare_enable(priv->clk);
+
 	ret = bcm_sf2_sw_rst(priv);
 	if (ret) {
 		pr_err("unable to software reset switch: %d\n", ret);
-		return ret;
+		goto out_clk;
 	}
 
 	bcm_sf2_gphy_enable_set(priv->dev->ds, true);
@@ -1117,7 +1130,7 @@ static int bcm_sf2_sw_probe(struct platform_device *pdev)
 	ret = bcm_sf2_mdio_register(ds);
 	if (ret) {
 		pr_err("failed to register MDIO bus\n");
-		return ret;
+		goto out_clk;
 	}
 
 	bcm_sf2_gphy_enable_set(priv->dev->ds, false);
@@ -1183,6 +1196,8 @@ static int bcm_sf2_sw_probe(struct platform_device *pdev)
 
 out_mdio:
 	bcm_sf2_mdio_unregister(priv);
+out_clk:
+	clk_disable_unprepare(priv->clk);
 	return ret;
 }
 
@@ -1195,6 +1210,7 @@ static int bcm_sf2_sw_remove(struct platform_device *pdev)
 	/* Disable all ports and interrupts */
 	bcm_sf2_sw_suspend(priv->dev->ds);
 	bcm_sf2_mdio_unregister(priv);
+	clk_disable_unprepare(priv->clk);
 
 	return 0;
 }
