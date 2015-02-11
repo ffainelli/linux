@@ -60,7 +60,8 @@ endif
 
 # BCM63XXx
 ifeq ($(CONFIG_ARCH_BCM_63XX),y)
-obj-y				+= bcm63xx.o
+obj-y				+= bcm63xx.o \
+				   $(pwd)/../boot/dts/bcm963138dvt.dtb.o
 obj-$(CONFIG_SMP)		+= bcm63xx_smp.o bcm63xx_pmb.o
 endif
 
