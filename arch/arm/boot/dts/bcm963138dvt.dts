@@ -12,7 +12,7 @@
 	model = "Broadcom BCM963138DVT";
 
 	chosen {
-		bootargs = "console=ttyS0,115200";
+		bootargs = "console=ttyS0,115200 earlyprintk";
 		stdout-path = &serial0;
 	};
 
