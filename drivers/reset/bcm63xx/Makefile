@@ -1,0 +1,1 @@
+obj-$(CONFIG_BCM63138_RESET)	+= bcm63138-pmb.o

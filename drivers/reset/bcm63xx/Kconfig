@@ -1,0 +1,7 @@
+if ARCH_BCM_63XX
+
+config BCM63138_RESET
+	bool
+	default y
+
+endif
