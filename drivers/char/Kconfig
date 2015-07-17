@@ -451,4 +451,15 @@ config RANDOM_TRUST_BOOTLOADER
 	pool. Otherwise, say N here so it will be regarded as device input that
 	only mixes the entropy pool.
 
+config BRCM_MOCA
+	tristate "Broadcom MoCA character driver"
+	default ARCH_BRCMSTB
+	help
+	  Say Y to build the MoCA control path driver.  This is a simple
+	  character driver that allows the MoCA daemon (mocad) to
+	  initialize and configure the MoCA interface.
+
+	  If your chipset supports power management, disabling this driver
+	  will keep the device permanently powered down.
+
 endmenu
