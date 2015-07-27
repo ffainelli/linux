@@ -111,6 +111,8 @@ static const char netdev_features_strings[NETDEV_FEATURE_COUNT][ETH_GSTRING_LEN]
 	[NETIF_F_RX_UDP_TUNNEL_PORT_BIT] =	 "rx-udp_tunnel-port-offload",
 	[NETIF_F_HW_TLS_RECORD_BIT] =	"tls-hw-record",
 	[NETIF_F_HW_TLS_TX_BIT] =	 "tls-hw-tx-offload",
+	[NETIF_F_HW_SWITCH_TAG_RX_BIT]	= "rx-switch-tag-hw-parse",
+	[NETIF_F_HW_SWITCH_TAG_TX_BIT]	= "tx-switch-tag-hw-insert",
 };
 
 static const char
@@ -328,10 +330,12 @@ static int ethtool_set_one_feature(struct net_device *dev,
 }
 
 #define ETH_ALL_FLAGS    (ETH_FLAG_LRO | ETH_FLAG_RXVLAN | ETH_FLAG_TXVLAN | \
-			  ETH_FLAG_NTUPLE | ETH_FLAG_RXHASH)
+			  ETH_FLAG_NTUPLE | ETH_FLAG_RXHASH | ETH_FLAG_RXSWITCH | \
+			  ETH_FLAG_TXSWITCH)
 #define ETH_ALL_FEATURES (NETIF_F_LRO | NETIF_F_HW_VLAN_CTAG_RX | \
 			  NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_NTUPLE | \
-			  NETIF_F_RXHASH)
+			  NETIF_F_RXHASH | NETIF_F_HW_SWITCH_TAG_RX | \
+			  NETIF_F_HW_SWITCH_TAG_TX)
 
 static u32 __ethtool_get_flags(struct net_device *dev)
 {
@@ -347,6 +351,10 @@ static u32 __ethtool_get_flags(struct net_device *dev)
 		flags |= ETH_FLAG_NTUPLE;
 	if (dev->features & NETIF_F_RXHASH)
 		flags |= ETH_FLAG_RXHASH;
+	if (dev->features & NETIF_F_HW_SWITCH_TAG_RX)
+		flags |= ETH_FLAG_RXSWITCH;
+	if (dev->features & NETIF_F_HW_SWITCH_TAG_TX)
+		flags |= ETH_FLAG_TXSWITCH;
 
 	return flags;
 }
@@ -368,6 +376,10 @@ static int __ethtool_set_flags(struct net_device *dev, u32 data)
 		features |= NETIF_F_NTUPLE;
 	if (data & ETH_FLAG_RXHASH)
 		features |= NETIF_F_RXHASH;
+	if (data & ETH_FLAG_RXSWITCH)
+		features |= NETIF_F_HW_SWITCH_TAG_RX;
+	if (data & ETH_FLAG_TXSWITCH)
+		features |= NETIF_F_HW_SWITCH_TAG_TX;
 
 	/* allow changing only bits set in hw_features */
 	changed = (features ^ dev->features) & ETH_ALL_FEATURES;

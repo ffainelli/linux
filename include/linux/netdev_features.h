@@ -73,7 +73,6 @@ enum {
 	NETIF_F_HW_VLAN_STAG_RX_BIT,	/* Receive VLAN STAG HW acceleration */
 	NETIF_F_HW_VLAN_STAG_FILTER_BIT,/* Receive filtering on VLAN STAGs */
 	NETIF_F_HW_L2FW_DOFFLOAD_BIT,	/* Allow L2 Forwarding in Hardware */
-
 	NETIF_F_HW_TC_BIT,		/* Offload TC infrastructure */
 	NETIF_F_HW_ESP_BIT,		/* Hardware ESP transformation offload */
 	NETIF_F_HW_ESP_TX_CSUM_BIT,	/* ESP with TX checksum offload */
@@ -82,6 +81,8 @@ enum {
 
 	NETIF_F_GRO_HW_BIT,		/* Hardware Generic receive offload */
 	NETIF_F_HW_TLS_RECORD_BIT,	/* Offload TLS record */
+	NETIF_F_HW_SWITCH_TAG_RX_BIT,	/* Receive switch tag acceleration */
+	NETIF_F_HW_SWITCH_TAG_TX_BIT,	/* Transmit switch tag acceleration */
 
 	/*
 	 * Add your fresh new feature above and remember to update
@@ -151,6 +152,8 @@ enum {
 #define NETIF_F_HW_TLS_RECORD	__NETIF_F(HW_TLS_RECORD)
 #define NETIF_F_GSO_UDP_L4	__NETIF_F(GSO_UDP_L4)
 #define NETIF_F_HW_TLS_TX	__NETIF_F(HW_TLS_TX)
+#define NETIF_F_HW_SWITCH_TAG_RX __NETIF_F(HW_SWITCH_TAG_RX)
+#define NETIF_F_HW_SWITCH_TAG_TX __NETIF_F(HW_SWITCH_TAG_TX)
 
 #define for_each_netdev_feature(mask_addr, bit)	\
 	for_each_set_bit(bit, (unsigned long *)mask_addr, NETDEV_FEATURE_COUNT)
