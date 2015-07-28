@@ -48,6 +48,11 @@ enum dsa_tag_protocol {
 
 #define DSA_RTABLE_NONE		-1
 
+/* This tag length is 4 bytes, older ones were 6 bytes, we do not
+ * handle them
+ */
+#define BRCM_TAG_LEN	4
+
 struct dsa_chip_data {
 	/*
 	 * How to access the switch configuration registers.
@@ -614,6 +619,13 @@ static inline int call_dsa_notifiers(unsigned long val, struct net_device *dev,
 #define BRCM_TAG_SET_PORT_QUEUE(p, q)	((p) << 8 | q)
 #define BRCM_TAG_GET_PORT(v)		((v) >> 8)
 #define BRCM_TAG_GET_QUEUE(v)		((v) & 0xff)
+#define BRCM_TAG_CB_OFFSET		(sizeof(((struct sk_buff *)0)->cb) - \
+					 BRCM_TAG_LEN)
+
+static inline void dsa_copy_brcm_tag(struct sk_buff *skb, const void *tag)
+{
+	memcpy(&skb->cb[BRCM_TAG_CB_OFFSET], tag, BRCM_TAG_LEN);
+}
 
 
 int dsa_port_get_phy_strings(struct dsa_port *dp, uint8_t *data);

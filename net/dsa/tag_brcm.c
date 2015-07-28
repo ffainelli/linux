@@ -15,11 +15,6 @@
 
 #include "dsa_priv.h"
 
-/* This tag length is 4 bytes, older ones were 6 bytes, we do not
- * handle them
- */
-#define BRCM_TAG_LEN	4
-
 /* Tag is constructed and desconstructed using byte by byte access
  * because the tag is placed after the MAC Source Address, which does
  * not make it 4-bytes aligned, so this might cause unaligned accesses
@@ -113,13 +108,20 @@ static struct sk_buff *brcm_tag_rcv_ll(struct sk_buff *skb,
 				       struct packet_type *pt,
 				       unsigned int offset)
 {
+	bool hw_accel = false;
 	int source_port;
 	u8 *brcm_tag;
 
-	if (unlikely(!pskb_may_pull(skb, BRCM_TAG_LEN)))
-		return NULL;
+	/* Verify if the underlying device supports automatic tag extraction */
+	hw_accel = !!(dev->features & NETIF_F_HW_SWITCH_TAG_RX);
+	if (hw_accel) {
+		brcm_tag = (u8 *)&skb->cb[BRCM_TAG_CB_OFFSET];
+	} else {
+		if (unlikely(!pskb_may_pull(skb, BRCM_TAG_LEN)))
+			return NULL;
 
-	brcm_tag = skb->data - offset;
+		brcm_tag = skb->data - offset;
+	}
 
 	/* The opcode should never be different than 0b000 */
 	if (unlikely((brcm_tag[0] >> BRCM_OPCODE_SHIFT) & BRCM_OPCODE_MASK))
@@ -139,7 +141,8 @@ static struct sk_buff *brcm_tag_rcv_ll(struct sk_buff *skb,
 		return NULL;
 
 	/* Remove Broadcom tag and update checksum */
-	skb_pull_rcsum(skb, BRCM_TAG_LEN);
+	if (!hw_accel)
+		skb_pull_rcsum(skb, BRCM_TAG_LEN);
 
 	return skb;
 }
@@ -156,6 +159,7 @@ static struct sk_buff *brcm_tag_xmit(struct sk_buff *skb,
 static struct sk_buff *brcm_tag_rcv(struct sk_buff *skb, struct net_device *dev,
 				    struct packet_type *pt)
 {
+	bool hw_accel = !!(dev->features & NETIF_F_HW_SWITCH_TAG_RX);
 	struct sk_buff *nskb;
 
 	/* skb->data points to the EtherType, the tag is right before it */
@@ -164,9 +168,10 @@ static struct sk_buff *brcm_tag_rcv(struct sk_buff *skb, struct net_device *dev,
 		return nskb;
 
 	/* Move the Ethernet DA and SA */
-	memmove(nskb->data - ETH_HLEN,
-		nskb->data - ETH_HLEN - BRCM_TAG_LEN,
-		2 * ETH_ALEN);
+	if (!hw_accel)
+		memmove(nskb->data - ETH_HLEN,
+			nskb->data - ETH_HLEN - BRCM_TAG_LEN,
+			2 * ETH_ALEN);
 
 	return nskb;
 }
