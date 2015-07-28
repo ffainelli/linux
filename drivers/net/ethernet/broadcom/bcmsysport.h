@@ -767,6 +767,7 @@ struct bcm_sysport_priv {
 	unsigned int		rx_chk_en:1;
 	unsigned int		tsb_en:1;
 	unsigned int		crc_fwd:1;
+	unsigned int		rx_tag_extract:1;
 	u16			rev;
 	u32			wolopts;
 	unsigned int		wol_irq_disabled:1;
