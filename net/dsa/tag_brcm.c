@@ -60,7 +60,20 @@ static struct sk_buff *brcm_tag_xmit_ll(struct sk_buff *skb,
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	u16 queue = skb_get_queue_mapping(skb);
+	u32 port_mask;
+	bool hw_accel;
 	u8 *brcm_tag;
+
+	hw_accel = !!(dp->cpu_dp->master->features & NETIF_F_HW_SWITCH_TAG_TX);
+
+	/* Ethernet adapter takes care of inserting the proper Broadcom tag,
+	 * we still need to hand it the port mapping
+	 */
+	if (hw_accel) {
+		port_mask = 1 << dp->index;
+		dsa_copy_brcm_tag(skb, &port_mask);
+		goto out_xmit;
+	}
 
 	if (skb_cow_head(skb, BRCM_TAG_LEN) < 0)
 		return NULL;
@@ -95,6 +108,7 @@ static struct sk_buff *brcm_tag_xmit_ll(struct sk_buff *skb,
 		brcm_tag[2] = BRCM_IG_DSTMAP2_MASK;
 	brcm_tag[3] = (1 << dp->index) & BRCM_IG_DSTMAP1_MASK;
 
+out_xmit:
 	/* Now tell the master network device about the desired output queue
 	 * as well
 	 */
