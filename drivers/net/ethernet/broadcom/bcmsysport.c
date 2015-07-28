@@ -168,10 +168,11 @@ static int bcm_sysport_set_tx_csum(struct net_device *dev,
 	struct bcm_sysport_priv *priv = netdev_priv(dev);
 	u32 reg;
 
-	/* Hardware transmit checksum requires us to enable the Transmit status
-	 * block prepended to the packet contents
+	/* Hardware transmit checksum and switch tag insertion requires us to
+	 * enable the Transmit status block prepended to the packet contents
 	 */
-	priv->tsb_en = !!(wanted & (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM));
+	priv->tsb_en = !!(wanted & (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |
+				    NETIF_F_HW_SWITCH_TAG_TX));
 	reg = tdma_readl(priv, TDMA_CONTROL);
 	if (priv->tsb_en)
 		reg |= tdma_control_bit(priv, TSB_EN);
@@ -208,7 +209,8 @@ static int bcm_sysport_set_features(struct net_device *dev,
 
 	if (changed & (NETIF_F_RXCSUM | NETIF_F_HW_SWITCH_TAG_RX))
 		ret = bcm_sysport_set_rx_csum(dev, wanted);
-	if (changed & (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM))
+	if (changed & (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |
+		       NETIF_F_HW_SWITCH_TAG_TX))
 		ret = bcm_sysport_set_tx_csum(dev, wanted);
 	if (changed & NETIF_F_HW_SWITCH_TAG_RX)
 		ret = bcm_sysport_set_rx_sw_tag(dev, wanted);
@@ -225,6 +227,12 @@ static netdev_features_t bcm_sysport_fix_features(struct net_device *dev,
 	 */
 	if (features & NETIF_F_HW_SWITCH_TAG_RX)
 		features |= NETIF_F_RXCSUM;
+
+	/* We need the Transmit Status Block for HW tag insertion, so request
+	 * it through the TX checksum offload bits
+	 */
+	if (features & NETIF_F_HW_SWITCH_TAG_TX)
+		features |= NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
 
 	return features;
 }
@@ -1226,6 +1234,7 @@ static struct sk_buff *bcm_sysport_insert_tsb(struct sk_buff *skb,
 {
 	struct sk_buff *nskb;
 	struct bcm_tsb *tsb;
+	u8 *dest_map;
 	u32 csum_info;
 	u8 ip_proto;
 	u16 csum_start;
@@ -1275,6 +1284,15 @@ static struct sk_buff *bcm_sysport_insert_tsb(struct sk_buff *skb,
 		}
 
 		tsb->l4_ptr_dest_map = csum_info;
+	}
+
+	/* Not all packets will be checksum complete, but we definitively
+	 * need to set the destination map for this packet to reach the
+	 * correct switch port
+	 */
+	if (dev->features & NETIF_F_HW_SWITCH_TAG_TX) {
+		dest_map = (u8 *)&skb->cb[BRCM_TAG_CB_OFFSET];
+		tsb->l4_ptr_dest_map = *dest_map << DEST_MAP_SHIFT;
 	}
 
 	return skb;
@@ -1345,6 +1363,13 @@ static netdev_tx_t bcm_sysport_xmit(struct sk_buff *skb,
 		       DESC_STATUS_SHIFT;
 	if (skb->ip_summed == CHECKSUM_PARTIAL)
 		len_status |= (DESC_L4_CSUM << DESC_STATUS_SHIFT);
+
+	/* TSB is enabled, using Broadcom tags with destination queue infered
+	 * from DEST_MAP set in TSB, else, use the statically configured
+	 * DEST_MAP from TDMA
+	 */
+	if (dev->features & NETIF_F_HW_SWITCH_TAG_TX)
+		len_status |= TX_STATUS_BRCM_TAG_ONE_TSB << DESC_STATUS_SHIFT;
 
 	ring->curr_desc++;
 	if (ring->curr_desc == ring->size)
@@ -2390,7 +2415,8 @@ static int bcm_sysport_probe(struct platform_device *pdev)
 	/* HW supported features, none enabled by default */
 	dev->hw_features |= NETIF_F_RXCSUM | NETIF_F_HIGHDMA |
 				NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |
-				NETIF_F_HW_SWITCH_TAG_RX;
+				NETIF_F_HW_SWITCH_TAG_RX |
+				NETIF_F_HW_SWITCH_TAG_TX;
 
 	/* Request the WOL interrupt and advertise suspend if available */
 	priv->wol_irq_disabled = 1;
