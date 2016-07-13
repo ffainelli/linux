@@ -18,6 +18,7 @@ struct ethoc_platform_data {
 	s8 phy_id;
 	u32 eth_clkfreq;
 	bool big_endian;
+	bool is_ts73xx;
 };
 
 #endif /* !LINUX_NET_ETHOC_H */

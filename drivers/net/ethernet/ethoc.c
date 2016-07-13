@@ -193,6 +193,7 @@ MODULE_PARM_DESC(buffer_size, "DMA buffer allocation size");
  * @lock:	device lock
  * @mdio:	MDIO bus for PHY access
  * @phy_id:	address of attached PHY
+ * @is_ts73xx:	true if running on TS-73xx with special alignment constraints
  */
 struct ethoc {
 	void __iomem *iobase;
@@ -221,6 +222,8 @@ struct ethoc {
 
 	int old_link;
 	int old_duplex;
+
+	bool is_ts73xx;
 };
 
 /**
@@ -416,6 +419,36 @@ static unsigned int ethoc_update_rx_stats(struct ethoc *dev,
 	return ret;
 }
 
+static void oeth2cpu_memcpy(unsigned char *dest, unsigned int *src, int nbytes)
+{
+	u32 __force dat;
+
+	/* memcpy() can't be used because it uses the load/store multiple
+	 * opcodes which asynchronously change the address of the ep93xx SMC
+	 * without initiating another cycle by toggling the read strobe.
+	 */
+	while(nbytes > 0) {
+		dat = *(src++);
+		*(u32 *)(dest) = dat;
+		nbytes -= sizeof(u32);
+		dest += sizeof(u32);
+	}
+}
+
+static void cpu2oeth_memcpy(unsigned int *dest, unsigned char *src, int nbytes)
+{
+	u32 __force dat;
+	// supposedly we can be guaranteed of at least 16-bit alignment
+	u16 __force *src16 = (u16 __force *)src;
+
+	while (nbytes > 0) {
+		dat = *(src16++);
+		dat |= *(src16++) << 16;
+		*(dest++) = dat;
+		nbytes -= sizeof(u32);
+	}
+}
+
 static int ethoc_rx(struct net_device *dev, int limit)
 {
 	struct ethoc *priv = netdev_priv(dev);
@@ -450,7 +483,12 @@ static int ethoc_rx(struct net_device *dev, int limit)
 
 			if (likely(skb)) {
 				void *src = priv->vma[entry];
-				memcpy_fromio(skb_put(skb, size), src, size);
+
+				skb_put(skb, size);
+				if (priv->is_ts73xx)
+					oeth2cpu_memcpy(skb->data, src, size);
+				else
+					memcpy_fromio(skb->data, src, size);
 				skb->protocol = eth_type_trans(skb, dev);
 				dev->stats.rx_packets++;
 				dev->stats.rx_bytes += size;
@@ -911,7 +949,10 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		bd.stat &= ~TX_BD_PAD;
 
 	dest = priv->vma[entry];
-	memcpy_toio(dest, skb->data, skb->len);
+	if (priv->is_ts73xx)
+		cpu2oeth_memcpy(dest, skb->data, skb->len);
+	else
+		memcpy_toio(dest, skb->data, skb->len);
 
 	bd.stat &= ~(TX_BD_STATS | TX_BD_LEN_MASK);
 	bd.stat |= TX_BD_LEN(skb->len);
@@ -1151,6 +1192,7 @@ static int ethoc_probe(struct platform_device *pdev)
 	if (pdata) {
 		ether_addr_copy(netdev->dev_addr, pdata->hwaddr);
 		priv->phy_id = pdata->phy_id;
+		priv->is_ts73xx = pdata->is_ts73xx;
 	} else {
 		const void *mac;
 
