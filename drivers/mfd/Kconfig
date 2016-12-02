@@ -352,6 +352,14 @@ config MFD_MX25_TSADC
 	  i.MX25 processors. They consist of a conversion queue for general
 	  purpose ADC and a queue for Touchscreens.
 
+config MFD_MICON
+	bool "Buffalo Kurobox Pro/Terastation II Pro/Live MCU interface"
+	depends on PLAT_ORION
+	help
+	  Enables support for the UART1 attached micro controller on Buffalo
+	  Kurobox Pro and Terastation II Pro/Live NAS devices. Used for
+	  machine restart.
+
 config MFD_HI6421_PMIC
 	tristate "HiSilicon Hi6421 PMU/Codec IC"
 	depends on OF
