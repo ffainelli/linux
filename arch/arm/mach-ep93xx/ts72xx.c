@@ -23,6 +23,8 @@
 #include <linux/spi/mmc_spi.h>
 #include <linux/mmc/host.h>
 #include <linux/platform_data/spi-ep93xx.h>
+#include <linux/if.h>
+#include <net/ethoc.h>
 
 #include <mach/gpio-ep93xx.h>
 #include <mach/hardware.h>
@@ -307,6 +309,40 @@ static struct platform_device ts73xx_fpga_device = {
 	.num_resources = ARRAY_SIZE(ts73xx_fpga_resources),
 };
 
+static struct resource ts73xx_fpga_ethoc_resources[] = {
+	{
+		.name	= "ethoc_reg",
+		.start	= 0x72100000 + 0x2000,
+		.end	= 0x72100000 + 0x2000 + 0x800 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "ethoc_bufs",
+		.start	= 0x72100000,
+		.end	= 0x72100000 + 0x2000 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= 40,
+		.end	= 40,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct ethoc_platform_data ts73xx_fpga_ethoc_pdata = {
+	.phy_id	= 1,
+	.is_ts73xx = true,
+};
+
+static struct platform_device ts73xx_fpga_ethoc_device = {
+	.name	= "ethoc",
+	.id	= 0,
+	.num_resources = ARRAY_SIZE(ts73xx_fpga_ethoc_resources),
+	.resource = ts73xx_fpga_ethoc_resources,
+	.dev	= {
+		.platform_data  = &ts73xx_fpga_ethoc_pdata,
+	},
+};
 #endif
 
 /*************************************************************************
@@ -341,8 +377,10 @@ static void __init ts72xx_init_machine(void)
 
 	ep93xx_register_eth(&ts72xx_eth_data, 1);
 #if IS_ENABLED(CONFIG_FPGA_MGR_TS73XX)
-	if (board_is_ts7300())
+	if (board_is_ts7300()) {
 		platform_device_register(&ts73xx_fpga_device);
+		platform_device_register(&ts73xx_fpga_ethoc_device);
+	}
 #endif
 	ep93xx_register_spi(&ts72xx_spi_info, ts72xx_spi_devices,
 			    ARRAY_SIZE(ts72xx_spi_devices));
