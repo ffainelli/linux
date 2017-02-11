@@ -116,7 +116,9 @@ static int ts73xx_fpga_probe(struct platform_device *pdev)
 {
 	struct device *kdev = &pdev->dev;
 	struct ts73xx_fpga_priv *priv;
+	struct fpga_manager *mgr;
 	struct resource *res;
+	int err;
 
 	priv = devm_kzalloc(kdev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -131,8 +133,16 @@ static int ts73xx_fpga_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->io_base);
 	}
 
-	return fpga_mgr_register(kdev, "TS-73xx FPGA Manager",
-				 &ts73xx_fpga_ops, priv);
+	err = fpga_mgr_register(kdev, "TS-73xx FPGA Manager",
+				&ts73xx_fpga_ops, priv);
+	if (err) {
+		dev_err(kdev, "failed to register FPGA manager\n");
+		return err;
+	}
+
+	mgr = dev_get_drvdata(kdev);
+
+	return fpga_mgr_firmware_load(mgr, 0, "ts7300_cyclone2.rbf");
 }
 
 static int ts73xx_fpga_remove(struct platform_device *pdev)
