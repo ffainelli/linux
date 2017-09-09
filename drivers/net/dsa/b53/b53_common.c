@@ -782,6 +782,17 @@ static void b53_reset_mib(struct b53_device *priv)
 	msleep(1);
 }
 
+void b53_enable_bpdu(struct dsa_switch *ds)
+{
+	struct b53_device *priv = ds->priv;
+	u8 gc;
+
+	b53_read8(priv, B53_MGMT_PAGE, B53_GLOBAL_CONFIG, &gc);
+	gc |= GC_RX_BPDU_EN;
+	b53_write8(priv, B53_MGMT_PAGE, B53_GLOBAL_CONFIG, gc);
+}
+EXPORT_SYMBOL(b53_enable_bpdu);
+
 static const struct b53_mib_desc *b53_get_mib(struct b53_device *dev)
 {
 	if (is5365(dev))
@@ -873,6 +884,8 @@ static int b53_setup(struct dsa_switch *ds)
 	}
 
 	b53_reset_mib(dev);
+
+	b53_enable_bpdu(ds);
 
 	ret = b53_apply_config(dev);
 	if (ret)
