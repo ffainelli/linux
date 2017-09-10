@@ -757,6 +757,7 @@ static int bcm_sf2_sw_setup(struct dsa_switch *ds)
 
 	b53_configure_vlan(ds);
 	bcm_sf2_enable_acb(ds);
+	b53_enable_bpdu(ds);
 
 	return 0;
 }
