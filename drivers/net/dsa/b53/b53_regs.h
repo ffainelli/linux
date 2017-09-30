@@ -44,6 +44,9 @@
 /* Port VLAN Page */
 #define B53_PVLAN_PAGE			0x31
 
+/* Trunking Page */
+#define B53_TRUNK_PAGE			0x32
+
 /* VLAN Registers */
 #define B53_VLAN_PAGE			0x34
 
@@ -358,6 +361,21 @@
 
 /* Join all VLANs register (16 bit) */
 #define B53_JOIN_ALL_VLAN_EN		0x50
+
+/*************************************************************************
+ * Trunking Registers
+ *************************************************************************/
+
+/* MAC Trunking Control Register (8 bit) */
+#define B53_MAC_TRUNK_CTRL		0x00
+#define  TRK_HASH_IDX_DA_SA		0
+#define  TRK_HASH_IDX_DA		1
+#define  TRK_HASH_IDX_SA		2
+#define  TRK_HASH_IDX_MASK		0x3
+#define  MAC_BASE_TRNK_EN		BIT(3)
+
+/* MAC Trunking Group Register (16 bit) */
+#define B53_MAC_TRUNK_GROUP(x)		(0x10 + (x) * 2)
 
 /*************************************************************************
  * 802.1Q Page Registers
