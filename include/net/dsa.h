@@ -197,10 +197,17 @@ struct dsa_port {
 	u8			stp_state;
 	struct net_device	*bridge_dev;
 	struct devlink_port	devlink_port;
+	u8			lag_id;
+	bool			lagged;
 	/*
 	 * Original copy of the master netdev ethtool_ops
 	 */
 	const struct ethtool_ops *orig_ethtool_ops;
+};
+
+struct dsa_lag_group {
+	unsigned long		members;
+	struct net_device	*lag_dev;
 };
 
 struct dsa_switch {
@@ -253,6 +260,12 @@ struct dsa_switch {
 
 	/* Number of switch port queues */
 	unsigned int		num_tx_queues;
+
+	/* Number of lag groups */
+	unsigned int		max_lags;
+	struct dsa_lag_group	*lags;
+	/* Number of members per lag group */
+	unsigned int		max_lag_members;
 
 	/* Dynamically allocated ports, keep last */
 	size_t num_ports;
@@ -465,6 +478,15 @@ struct dsa_switch_ops {
 					 int port, struct net_device *br);
 	void	(*crosschip_bridge_leave)(struct dsa_switch *ds, int sw_index,
 					  int port, struct net_device *br);
+
+	/*
+	 * Link aggregation
+	 */
+	int	(*port_lag_join)(struct dsa_switch *ds, int port, u8 lag_id);
+	void	(*port_lag_leave)(struct dsa_switch *ds, int port, u8 lag_id,
+				  bool lag_disable);
+	int	(*port_lag_change)(struct dsa_switch *ds, int port,
+				   struct netdev_lag_lower_state_info *info);
 };
 
 struct dsa_switch_driver {
@@ -489,6 +511,7 @@ static inline bool netdev_uses_dsa(struct net_device *dev)
 }
 
 struct dsa_switch *dsa_switch_alloc(struct device *dev, size_t n);
+int dsa_switch_alloc_lags(struct dsa_switch *ds, size_t n);
 void dsa_unregister_switch(struct dsa_switch *ds);
 int dsa_register_switch(struct dsa_switch *ds);
 #ifdef CONFIG_PM_SLEEP

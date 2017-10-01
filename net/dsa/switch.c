@@ -256,6 +256,36 @@ static int dsa_switch_event(struct notifier_block *nb,
 	return notifier_from_errno(err);
 }
 
+int dsa_switch_lag_get_index(struct dsa_switch *ds, struct net_device *lag_dev,
+			     u8 *lag_id)
+{
+	struct dsa_lag_group *lag;
+	int free_lag_idx = -1;
+	unsigned int i;
+
+	if (!ds->max_lags)
+		return -EOPNOTSUPP;
+
+	for (i = 0; i < ds->max_lags; i++) {
+		lag = &ds->lags[i];
+		if (lag->members) {
+			if (lag->lag_dev == lag_dev) {
+				*lag_id = i;
+				return 0;
+			}
+		} else if (free_lag_idx < 0) {
+			free_lag_idx = i;
+		}
+	}
+
+	if (free_lag_idx < 0)
+		return -EBUSY;
+
+	*lag_id = free_lag_idx;
+
+	return 0;
+}
+
 int dsa_switch_register_notifier(struct dsa_switch *ds)
 {
 	ds->nb.notifier_call = dsa_switch_event;

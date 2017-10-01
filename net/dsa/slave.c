@@ -1266,23 +1266,155 @@ static bool dsa_slave_dev_check(struct net_device *dev)
 	return dev->netdev_ops == &dsa_slave_netdev_ops;
 }
 
-static int dsa_slave_changeupper(struct net_device *dev,
-				 struct netdev_notifier_changeupper_info *info)
+static bool dsa_slave_lag_check(struct net_device *dev, struct net_device *lag_dev,
+				struct netdev_lag_upper_info *lag_upper_info)
+{
+	struct dsa_slave_priv *p = netdev_priv(dev);
+	u8 lag_id;
+
+	/* No more lag identifiers available or already in use */
+	if (dsa_switch_lag_get_index(p->dp->ds, lag_dev, &lag_id) != 0)
+		return false;
+
+	if (lag_upper_info->tx_type != NETDEV_LAG_TX_TYPE_HASH)
+		return false;
+
+	return true;
+}
+
+static int dsa_slave_changeupper_bridge(struct net_device *dev,
+					struct netdev_notifier_changeupper_info *info)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	int err = NOTIFY_DONE;
 
-	if (netif_is_bridge_master(info->upper_dev)) {
-		if (info->linking) {
-			err = dsa_port_bridge_join(dp, info->upper_dev);
-			err = notifier_from_errno(err);
-		} else {
-			dsa_port_bridge_leave(dp, info->upper_dev);
-			err = NOTIFY_OK;
-		}
+	if (info->linking) {
+		err = dsa_port_bridge_join(dp, info->upper_dev);
+		err = notifier_from_errno(err);
+	} else {
+		dsa_port_bridge_leave(dp, info->upper_dev);
+		err = NOTIFY_OK;
 	}
 
 	return err;
+}
+
+static int dsa_slave_changeupper_lag(struct net_device *dev,
+				     struct netdev_notifier_changeupper_info *info)
+{
+	struct dsa_slave_priv *p = netdev_priv(dev);
+	struct dsa_port *dp = p->dp;
+	int err = NOTIFY_DONE;
+
+	if (info->linking) {
+		err = dsa_port_lag_join(dp, info->upper_dev);
+		err = notifier_from_errno(err);
+	} else {
+		err = dsa_port_lag_leave(dp, info->upper_dev);
+		err = NOTIFY_OK;
+	}
+
+	return err;
+}
+
+static int dsa_slave_upper_event(struct net_device *lower_dev,
+				 struct net_device *slave_dev, unsigned long event,
+				 void *ptr)
+{
+	struct netdev_notifier_changeupper_info *info;
+	struct net_device *upper_dev;
+	struct dsa_slave_priv *p;
+	int err = 0;
+
+	info = ptr;
+	p = netdev_priv(slave_dev);
+
+	switch (event) {
+	case NETDEV_PRECHANGEUPPER:
+		upper_dev = info->upper_dev;
+		if (!is_vlan_dev(upper_dev) &&
+		    !netif_is_lag_master(upper_dev) &&
+		    !netif_is_bridge_master(upper_dev))
+			return -EINVAL;
+
+		if (!info->linking)
+			break;
+
+		if (netdev_has_any_upper_dev(upper_dev))
+			return -EINVAL;
+
+		if (netif_is_lag_master(upper_dev) &&
+		    !dsa_slave_lag_check(lower_dev, upper_dev, info->upper_info))
+			return -EINVAL;
+
+		break;
+	case NETDEV_CHANGEUPPER:
+		upper_dev = info->upper_dev;
+		if (netif_is_bridge_master(upper_dev))
+			err = dsa_slave_changeupper_bridge(lower_dev, info);
+		else if (netif_is_lag_master(upper_dev))
+			err = dsa_slave_changeupper_lag(lower_dev, info);
+		break;
+	}
+
+	return err;
+}
+
+static int dsa_slave_lower_event(struct net_device *dev,
+				 unsigned long event, void *ptr)
+{
+	struct netdev_notifier_changelowerstate_info *info;
+	struct dsa_slave_priv *p;
+	int err;
+
+	p = netdev_priv(dev);
+	info = ptr;
+
+	switch (event) {
+	case NETDEV_CHANGELOWERSTATE:
+		if (netif_is_lag_port(dev) && p->dp->lagged) {
+			err = dsa_port_lag_change(p->dp, info->lower_state_info);
+			if (err)
+				netdev_err(dev, "Failed to reflect LAG\n");
+		}
+		break;
+	}
+
+	return 0;
+}
+
+static int dsa_slave_upper_lower_event(struct net_device *lower_dev,
+				       struct net_device *slave_dev,
+				       unsigned long event, void *ptr)
+{
+	switch (event) {
+	case NETDEV_PRECHANGEUPPER:
+	case NETDEV_CHANGEUPPER:
+		return dsa_slave_upper_event(lower_dev, slave_dev, event, ptr);
+	case NETDEV_CHANGELOWERSTATE:
+		return dsa_slave_lower_event(slave_dev, event, ptr);
+	}
+
+	return NOTIFY_OK;
+}
+
+static int dsa_slave_lag_event(struct net_device *lag_dev,
+				unsigned long event, void *ptr)
+{
+	struct net_device *dev;
+	struct list_head *iter;
+	int err;
+
+	netdev_for_each_lower_dev(lag_dev, dev, iter) {
+		if (dsa_slave_dev_check(dev)) {
+			err = dsa_slave_upper_lower_event(lag_dev, dev,
+							  event, ptr);
+			if (err)
+				return err;
+		}
+	}
+
+	return NOTIFY_OK;
 }
 
 static int dsa_slave_netdevice_event(struct notifier_block *nb,
@@ -1290,11 +1422,14 @@ static int dsa_slave_netdevice_event(struct notifier_block *nb,
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 
+	if (netif_is_lag_master(dev))
+		return dsa_slave_lag_event(dev, event, ptr);
+
 	if (!dsa_slave_dev_check(dev))
 		return NOTIFY_DONE;
 
 	if (event == NETDEV_CHANGEUPPER)
-		return dsa_slave_changeupper(dev, ptr);
+		return dsa_slave_upper_event(dev, dev, event, ptr);
 
 	return NOTIFY_DONE;
 }

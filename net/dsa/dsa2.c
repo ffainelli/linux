@@ -759,6 +759,18 @@ struct dsa_switch *dsa_switch_alloc(struct device *dev, size_t n)
 }
 EXPORT_SYMBOL_GPL(dsa_switch_alloc);
 
+int dsa_switch_alloc_lags(struct dsa_switch *ds, size_t n)
+{
+	ds->max_lags = n;
+	ds->lags = devm_kcalloc(ds->dev, ds->max_lags,
+			        sizeof(*ds->lags), GFP_KERNEL);
+	if (!ds->lags)
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dsa_switch_alloc_lags);
+
 int dsa_register_switch(struct dsa_switch *ds)
 {
 	int err;

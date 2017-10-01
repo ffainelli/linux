@@ -317,3 +317,94 @@ void dsa_port_fixed_link_unregister_of(struct dsa_port *dp)
 	if (of_phy_is_fixed_link(dn))
 		of_phy_deregister_fixed_link(dn);
 }
+
+static int dsa_port_lag_member(struct dsa_port *dp, struct dsa_lag_group *lag)
+{
+	struct dsa_switch *ds = dp->ds;
+	int err = -EOPNOTSUPP;
+	unsigned int i;
+
+	if (!ds->max_lag_members)
+		return err;
+
+	for (i = 0; i < ds->max_lag_members; i++) {
+		if (!(BIT(i) & lag->members))
+			return 0;
+	}
+
+	return -EBUSY;
+}
+
+int dsa_port_lag_join(struct dsa_port *dp, struct net_device *lag_dev)
+{
+	struct dsa_switch *ds = dp->ds;
+	struct dsa_lag_group *lag;
+	int err = -EOPNOTSUPP;
+	u8 lag_id;
+
+	if (!ds->ops->port_lag_join)
+		return err;
+
+	/* Obtain a new lag identifier */
+	err = dsa_switch_lag_get_index(ds, lag_dev, &lag_id);
+	if (err)
+		return err;
+
+	/* Create a lag group if non-existent */
+	lag = &ds->lags[lag_id];
+	if (!lag->members)
+		lag->lag_dev = lag_dev;
+
+	err = dsa_port_lag_member(dp, lag);
+	if (err)
+		return err;
+
+	err = ds->ops->port_lag_join(ds, dp->index, lag_id);
+	if (err)
+		return err;
+
+	dp->lag_id = lag_id;
+	dp->lagged = true;
+	lag->members |= BIT(dp->index);
+
+	return err;
+}
+
+int dsa_port_lag_leave(struct dsa_port *dp, struct net_device *lag_dev)
+{
+	struct dsa_switch *ds = dp->ds;
+	struct dsa_lag_group *lag;
+	bool lag_disable = false;
+	int err = -EOPNOTSUPP;
+	u8 lag_id;
+
+	if (!ds->ops->port_lag_leave)
+		return err;
+
+	if (!dp->lagged)
+		return 0;
+
+	lag_id = dp->lag_id;
+	lag = &ds->lags[lag_id];
+
+	/* If we are the last member of this LAG group, we can disable it */
+	if ((lag->members & BIT(dp->index)) == BIT(dp->index))
+		lag_disable = true;
+
+	ds->ops->port_lag_leave(ds, dp->index, lag_id, lag_disable);
+	dp->lagged = false;
+	lag->members &= ~BIT(dp->index);
+
+	return err;
+}
+
+int dsa_port_lag_change(struct dsa_port *dp,
+			struct netdev_lag_lower_state_info *info)
+{
+	struct dsa_switch *ds = dp->ds;
+
+	if (!ds->ops->port_lag_change)
+		return -EOPNOTSUPP;
+
+	return ds->ops->port_lag_change(ds, dp->index, info);
+}
