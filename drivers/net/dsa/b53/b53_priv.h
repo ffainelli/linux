@@ -118,6 +118,9 @@ struct b53_device {
 	struct b53_vlan *vlans;
 	unsigned int num_ports;
 	struct b53_port *ports;
+
+	unsigned int num_lags;
+	unsigned int max_lag_members;
 };
 
 #define b53_for_each_port(dev, i) \
@@ -319,5 +322,7 @@ void b53_eee_enable_set(struct dsa_switch *ds, int port, bool enable);
 int b53_eee_init(struct dsa_switch *ds, int port, struct phy_device *phy);
 int b53_get_mac_eee(struct dsa_switch *ds, int port, struct ethtool_eee *e);
 int b53_set_mac_eee(struct dsa_switch *ds, int port, struct ethtool_eee *e);
+int b53_lag_join(struct dsa_switch *ds, int port, u8 lag_id);
+void b53_lag_leave(struct dsa_switch *ds, int port, u8 lag_id, bool lag_disable);
 
 #endif

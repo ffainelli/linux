@@ -1643,6 +1643,47 @@ int b53_set_mac_eee(struct dsa_switch *ds, int port, struct ethtool_eee *e)
 }
 EXPORT_SYMBOL(b53_set_mac_eee);
 
+int b53_lag_join(struct dsa_switch *ds, int port, u8 lag_id)
+{
+	struct b53_device *dev = ds->priv;
+	u8 trunk_ctl;
+	u16 lag;
+
+	/* Program this port and the CPU port in this trunking group */
+	b53_read16(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_GROUP(lag_id), &lag);
+	lag |= BIT(port);
+	b53_write16(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_GROUP(lag_id), lag);
+
+	/* Enable MAC DA,SA hashing, enable trunking */
+	b53_read8(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_CTRL, &trunk_ctl);
+	trunk_ctl &= ~TRK_HASH_IDX_MASK;
+	trunk_ctl |= MAC_BASE_TRNK_EN;
+	b53_write8(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_CTRL, trunk_ctl);
+
+	return 0;
+}
+EXPORT_SYMBOL(b53_lag_join);
+
+void b53_lag_leave(struct dsa_switch *ds, int port, u8 lag_id, bool lag_disable)
+{
+	struct b53_device *dev = ds->priv;
+	u8 trunk_ctl;
+	u16 lag;
+
+	/* Remove this port from the trunking group */
+	b53_read16(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_GROUP(lag_id), &lag);
+	lag &= ~BIT(port);
+	b53_write16(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_GROUP(lag_id), lag);
+
+	/* Disable trunking if the lag group is being removed */
+	if (lag_disable) {
+		b53_read8(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_CTRL, &trunk_ctl);
+		trunk_ctl &= ~(TRK_HASH_IDX_MASK | MAC_BASE_TRNK_EN);
+		b53_write8(dev, B53_TRUNK_PAGE, B53_MAC_TRUNK_CTRL, trunk_ctl);
+	}
+}
+EXPORT_SYMBOL(b53_lag_leave);
+
 static const struct dsa_switch_ops b53_switch_ops = {
 	.get_tag_protocol	= b53_get_tag_protocol,
 	.setup			= b53_setup,
@@ -1669,6 +1710,8 @@ static const struct dsa_switch_ops b53_switch_ops = {
 	.port_fdb_del		= b53_fdb_del,
 	.port_mirror_add	= b53_mirror_add,
 	.port_mirror_del	= b53_mirror_del,
+	.port_lag_join		= b53_lag_join,
+	.port_lag_leave		= b53_lag_leave,
 };
 
 struct b53_chip_data {
@@ -1682,6 +1725,8 @@ struct b53_chip_data {
 	u8 duplex_reg;
 	u8 jumbo_pm_reg;
 	u8 jumbo_size_reg;
+	unsigned int num_lags;
+	unsigned int max_lag_members;
 };
 
 #define B53_VTA_REGS	\
@@ -1721,6 +1766,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM5397_DEVICE_ID,
@@ -1733,6 +1780,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM5398_DEVICE_ID,
@@ -1745,6 +1794,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53115_DEVICE_ID,
@@ -1757,6 +1808,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53125_DEVICE_ID,
@@ -1769,6 +1822,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53128_DEVICE_ID,
@@ -1781,6 +1836,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM63XX_DEVICE_ID,
@@ -1793,6 +1850,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_63XX,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK_63XX,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE_63XX,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53010_DEVICE_ID,
@@ -1805,6 +1864,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53011_DEVICE_ID,
@@ -1817,6 +1878,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53012_DEVICE_ID,
@@ -1829,6 +1892,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53018_DEVICE_ID,
@@ -1841,6 +1906,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM53019_DEVICE_ID,
@@ -1853,6 +1920,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM58XX_DEVICE_ID,
@@ -1865,6 +1934,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM7445_DEVICE_ID,
@@ -1877,6 +1948,8 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 	{
 		.chip_id = BCM7278_DEVICE_ID,
@@ -1889,11 +1962,14 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.num_lags = 2,
+		.max_lag_members = 4,
 	},
 };
 
 static int b53_switch_init(struct b53_device *dev)
 {
+	struct dsa_switch *ds = dev->ds;
 	unsigned int i;
 	int ret;
 
@@ -1912,6 +1988,8 @@ static int b53_switch_init(struct b53_device *dev)
 			dev->cpu_port = chip->cpu_port;
 			dev->num_vlans = chip->vlans;
 			dev->num_arl_entries = chip->arl_entries;
+			dev->num_lags = chip->num_lags;
+			dev->max_lag_members = chip->max_lag_members;
 			break;
 		}
 	}
@@ -1973,7 +2051,9 @@ static int b53_switch_init(struct b53_device *dev)
 			return ret;
 	}
 
-	return 0;
+	ds->max_lag_members = dev->max_lag_members;
+
+	return dsa_switch_alloc_lags(ds, dev->num_lags);
 }
 
 struct b53_device *b53_switch_alloc(struct device *base,
