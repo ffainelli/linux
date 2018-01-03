@@ -9,20 +9,19 @@
 /dts-v1/;
 
 #include "bcm4708.dtsi"
-#include "bcm5301x-nand-cs0-bch8.dtsi"
 
 / {
 	compatible = "smartrg,sr400ac", "brcm,bcm4708";
 	model = "SmartRG SR400ac";
 
 	chosen {
-		bootargs = "console=ttyS0,115200 earlycon";
+		bootargs = "console=ttyS0,115200 earlycon earlyprintk";
 	};
 
 	memory@0 {
 		device_type = "memory";
-		reg = <0x00000000 0x08000000>,
-		      <0x88000000 0x08000000>;
+		reg = <0x00000000 0x08000000>;
+		      /* <0x88000000 0x08000000>; */
 	};
 
 	leds {
