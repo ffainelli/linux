@@ -98,4 +98,20 @@ static inline phys_addr_t dma_to_phys(struct device *dev, dma_addr_t daddr)
 #endif
 #endif /* CONFIG_SWIOTLB */
 
+#ifndef plat_map_coherent
+static inline int plat_map_coherent(dma_addr_t handle, void *cac_va, size_t size,
+				    void **uncac_va, gfp_t gfp)
+{
+	*uncac_va = UNCAC_ADDR(cac_va);
+	return 0;
+}
+#endif
+
+#ifndef plat_unmap_coherent
+static inline void *plat_unmap_coherent(void *addr)
+{
+	return CAC_ADDR(addr);
+}
+#endif
+
 #endif /* __ASM_MACH_GENERIC_DMA_COHERENCE_H */

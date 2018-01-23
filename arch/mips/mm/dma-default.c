@@ -151,7 +151,11 @@ static void *mips_dma_alloc_coherent(struct device *dev, size_t size,
 	if (!(attrs & DMA_ATTR_NON_CONSISTENT) &&
 	    !plat_device_is_coherent(dev)) {
 		dma_cache_wback_inv((unsigned long) ret, size);
-		ret = UNCAC_ADDR(ret);
+		if (plat_map_coherent(*dma_handle, ret, PFN_ALIGN(size),
+				      &ret, gfp)) {
+			free_pages((unsigned long)ret, size);
+			ret = NULL;
+		}
 	}
 
 	return ret;
@@ -167,7 +171,7 @@ static void mips_dma_free_coherent(struct device *dev, size_t size, void *vaddr,
 	plat_unmap_dma_mem(dev, dma_handle, size, DMA_BIDIRECTIONAL);
 
 	if (!(attrs & DMA_ATTR_NON_CONSISTENT) && !plat_device_is_coherent(dev))
-		addr = CAC_ADDR(addr);
+		addr = (unsigned long)plat_unmap_coherent(vaddr);
 
 	page = virt_to_page((void *) addr);
 
@@ -187,7 +191,7 @@ static int mips_dma_mmap(struct device *dev, struct vm_area_struct *vma,
 	int ret = -ENXIO;
 
 	if (!plat_device_is_coherent(dev))
-		addr = CAC_ADDR(addr);
+		addr = (unsigned long)plat_unmap_coherent((void *)addr);
 
 	pfn = page_to_pfn(virt_to_page((void *)addr));
 
