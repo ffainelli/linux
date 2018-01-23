@@ -106,6 +106,7 @@ void (*board_ejtag_handler_setup)(void);
 void (*board_bind_eic_interrupt)(int irq, int regset);
 void (*board_ebase_setup)(void);
 void(*board_cache_error_setup)(void);
+void (*board_tlb_init)(void);
 
 static void show_raw_backtrace(unsigned long reg29)
 {
@@ -2230,7 +2231,10 @@ void per_cpu_trap_init(bool is_boot_cpu)
 	/* Boot CPU's cache setup in setup_arch(). */
 	if (!is_boot_cpu)
 		cpu_cache_init();
-	tlb_init();
+	if (board_tlb_init)
+		board_tlb_init();
+	else
+		tlb_init();
 	TLBMISS_HANDLER_SETUP();
 }
 
