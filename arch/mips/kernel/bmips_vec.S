@@ -39,7 +39,7 @@
 
 LEAF(bmips_smp_movevec)
 	la	k0, 1f
-	li	k1, CKSEG1
+	li	k1, 0xa0000000
 	or	k0, k1
 	jr	k0
 
@@ -58,7 +58,7 @@ LEAF(bmips_smp_movevec)
 	mfc0	k1, $22, 3
 	srl	k1, 16
 	andi	k1, 0x8000
-	or	k1, CKSEG1 | BMIPS_RELO_VECTOR_CONTROL_0
+	or	k1, 0xa0000000 | BMIPS_RELO_VECTOR_CONTROL_0
 	or	k0, k1
 	li	k1, 0xa0080000
 	sw	k1, 0(k0)
@@ -67,7 +67,7 @@ LEAF(bmips_smp_movevec)
 	wait
 
 	la	k0, bmips_reset_nmi_vec
-	li	k1, CKSEG1
+	li	k1, 0xa0000000
 	or	k0, k1
 	jr	k0
 END(bmips_smp_movevec)
