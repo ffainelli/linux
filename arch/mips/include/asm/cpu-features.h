@@ -623,4 +623,12 @@
 #define cpu_guest_has_dyn_maar	(cpu_data[0].guest.options_dyn & MIPS_CPU_MAAR)
 #endif
 
+#if defined(CONFIG_XKS01)
+#ifndef cpu_has_xks01
+# define cpu_has_xks01		(cpu_data[0].options & MIPS_CPU_XKS01)
+#endif
+#else
+# define cpu_has_xks01		0
+#endif /* CONFIG_XKS01 */
+
 #endif /* __ASM_CPU_FEATURES_H */

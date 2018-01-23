@@ -252,8 +252,12 @@ extern int __virt_addr_valid(const volatile void *kaddr);
 	 ((current->personality & READ_IMPLIES_EXEC) ? VM_EXEC : 0) | \
 	 VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC)
 
+#ifdef CONFIG_XKS01
+#define CAC_ADDR(addr)		({ BUG(); NULL; })
+#else
 #define UNCAC_ADDR(addr)	((addr) - PAGE_OFFSET + UNCAC_BASE)
 #define CAC_ADDR(addr)		((addr) - UNCAC_BASE + PAGE_OFFSET)
+#endif
 
 #include <asm-generic/memory_model.h>
 #include <asm-generic/getorder.h>

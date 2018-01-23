@@ -128,13 +128,15 @@ void __iomem * __ioremap(phys_addr_t phys_addr, phys_addr_t size, unsigned long 
 	if (!size || last_addr < phys_addr)
 		return NULL;
 
-	/*
-	 * Map uncached objects in the low 512mb of address space using KSEG1,
-	 * otherwise map using page tables.
-	 */
-	if (IS_LOW512(phys_addr) && IS_LOW512(last_addr) &&
-	    flags == _CACHE_UNCACHED)
-		return (void __iomem *) CKSEG1ADDR(phys_addr);
+	if (likely(!cpu_has_xks01)) {
+		/*
+		 * Map uncached objects in the low 512mb of address space using
+		 * KSEG1, otherwise map using page tables.
+		 */
+		if (IS_LOW512(phys_addr) && IS_LOW512(last_addr) &&
+		    flags == _CACHE_UNCACHED)
+			return (void __iomem *) CKSEG1ADDR(phys_addr);
+	}
 
 	/*
 	 * Don't allow anybody to remap normal RAM that we're using..
