@@ -11,29 +11,38 @@
 
 struct device;
 
+#ifndef plat_map_dma_mem
 static inline dma_addr_t plat_map_dma_mem(struct device *dev, void *addr,
 	size_t size)
 {
 	return virt_to_phys(addr);
 }
+#endif
 
+#ifndef plat_map_dma_mem_page
 static inline dma_addr_t plat_map_dma_mem_page(struct device *dev,
 	struct page *page)
 {
 	return page_to_phys(page);
 }
+#endif
 
+#ifndef plat_dma_addr_to_phys
 static inline unsigned long plat_dma_addr_to_phys(struct device *dev,
 	dma_addr_t dma_addr)
 {
 	return dma_addr;
 }
+#endif
 
+#ifndef plat_unmap_dma_mem
 static inline void plat_unmap_dma_mem(struct device *dev, dma_addr_t dma_addr,
 	size_t size, enum dma_data_direction direction)
 {
 }
+#endif
 
+#ifndef plat_dma_supported
 static inline int plat_dma_supported(struct device *dev, u64 mask)
 {
 	/*
@@ -46,7 +55,9 @@ static inline int plat_dma_supported(struct device *dev, u64 mask)
 
 	return 1;
 }
+#endif
 
+#ifndef plat_device_is_coherent
 static inline int plat_device_is_coherent(struct device *dev)
 {
 #ifdef CONFIG_DMA_PERDEV_COHERENT
@@ -63,6 +74,7 @@ static inline int plat_device_is_coherent(struct device *dev)
 	}
 #endif
 }
+#endif
 
 #ifndef plat_post_dma_flush
 static inline void plat_post_dma_flush(struct device *dev)
@@ -71,15 +83,19 @@ static inline void plat_post_dma_flush(struct device *dev)
 #endif
 
 #ifdef CONFIG_SWIOTLB
+#ifndef phys_to_dma
 static inline dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)
 {
 	return paddr;
 }
+#endif
 
+#ifndef dma_to_phys
 static inline phys_addr_t dma_to_phys(struct device *dev, dma_addr_t daddr)
 {
 	return daddr;
 }
 #endif
+#endif /* CONFIG_SWIOTLB */
 
 #endif /* __ASM_MACH_GENERIC_DMA_COHERENCE_H */
