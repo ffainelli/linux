@@ -19,6 +19,7 @@
 #include <linux/of_platform.h>
 #include <linux/libfdt.h>
 #include <linux/smp.h>
+#include <linux/kernel.h>
 #include <asm/addrspace.h>
 #include <asm/bmips.h>
 #include <asm/bootinfo.h>
@@ -28,11 +29,17 @@
 #include <asm/smp-ops.h>
 #include <asm/time.h>
 #include <asm/traps.h>
+#include <asm/fw/cfe/cfe_api.h>
+#include <asm/fw/cfe/cfe_error.h>
 
 #define RELO_NORMAL_VEC		BIT(18)
 
 #define REG_BCM6328_OTP		((void __iomem *)CKSEG1ADDR(0x1000062c))
 #define BCM6328_TP1_DISABLED	BIT(9)
+
+unsigned long __initdata cfe_seal;
+unsigned long __initdata cfe_entry;
+unsigned long __initdata cfe_handle;
 
 static const unsigned long kbase = VMLINUX_LOAD_ADDRESS & 0xfff00000;
 
@@ -123,9 +130,45 @@ static const struct bmips_quirk bmips_quirk_list[] = {
 	{ },
 };
 
+static unsigned long dram0_size_mb;
+
+extern void bmips_tlb_init(void);
+
+static char __initdata cfe_buf[COMMAND_LINE_SIZE];
+
+static inline int __init parse_ulong(const char *buf, unsigned long *val)
+{
+	char *endp;
+	unsigned long tmp;
+
+	tmp = simple_strtoul(buf, &endp, 0);
+	if (*endp == 0) {
+		*val = tmp;
+		return 0;
+	}
+
+	return -1;
+}
+
+#define FETCH(name, fn, arg) do { \
+	if (cfe_getenv(name, cfe_buf, COMMAND_LINE_SIZE) == CFE_OK) { \
+		fn(cfe_buf, arg); \
+        } \
+        } while (0)
+
+static void __init __maybe_unused cfe_read_configuration(void)
+{
+	if (cfe_seal != CFE_EPTSEAL)
+		return;
+
+	FETCH("DRAM0_SIZE", parse_ulong, &dram0_size_mb);
+}
+
 void __init prom_init(void)
 {
+	cfe_init(cfe_handle, cfe_entry);
 	bmips_cpu_setup();
+	cfe_read_configuration();
 	register_bmips_smp_ops();
 }
 
