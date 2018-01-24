@@ -21,34 +21,22 @@
 
 struct device;
 
+#define plat_map_dma_mem	plat_map_dma_mem
 extern dma_addr_t plat_map_dma_mem(struct device *dev, void *addr, size_t size);
+#define plat_map_dma_mem_page	plat_map_dma_mem_page
 extern dma_addr_t plat_map_dma_mem_page(struct device *dev, struct page *page);
+#define plat_dma_addr_to_phys	plat_dma_addr_to_phys
 extern unsigned long plat_dma_addr_to_phys(struct device *dev,
 	dma_addr_t dma_addr);
 
-static inline void plat_unmap_dma_mem(struct device *dev, dma_addr_t dma_addr,
-	size_t size, enum dma_data_direction direction)
-{
-}
-
-static inline int plat_dma_supported(struct device *dev, u64 mask)
-{
-	/*
-	 * we fall back to GFP_DMA when the mask isn't all 1s,
-	 * so we can't guarantee allocations that must be
-	 * within a tighter range than GFP_DMA..
-	 */
-	if (mask < DMA_BIT_MASK(24))
-		return 0;
-
-	return 1;
-}
-
+#define plat_device_is_coherent	plat_device_is_coherent
 static inline int plat_device_is_coherent(struct device *dev)
 {
 	return 0;
 }
 
 #define plat_post_dma_flush	bmips_post_dma_flush
+
+#include <asm/mach-generic/dma-coherence.h>
 
 #endif /* __ASM_MACH_BMIPS_DMA_COHERENCE_H */
