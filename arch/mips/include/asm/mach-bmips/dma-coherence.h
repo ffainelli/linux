@@ -37,6 +37,12 @@ static inline int plat_device_is_coherent(struct device *dev)
 
 #define plat_post_dma_flush	bmips_post_dma_flush
 
+#define plat_map_coherent	plat_map_coherent
+extern int plat_map_coherent(dma_addr_t handle, void *cac_va, size_t size,
+			     void **uncac_va, gfp_t gfp);
+#define plat_unmap_coherent	plat_unmap_coherent
+extern void *plat_unmap_coherent(void *addr);
+
 #include <asm/mach-generic/dma-coherence.h>
 
 #endif /* __ASM_MACH_BMIPS_DMA_COHERENCE_H */

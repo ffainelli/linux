@@ -134,6 +134,39 @@ static unsigned long dram0_size_mb;
 
 extern void bmips_tlb_init(void);
 
+static void bmips_add_memory_regions(void)
+{
+	board_tlb_init = bmips_tlb_init;
+
+	do {
+		unsigned long dram0_mb = dram0_size_mb, mb;
+
+		mb = min(dram0_mb, BRCM_MAX_LOWER_MB);
+		dram0_mb -= mb;
+
+		add_memory_region(0, mb << 20, BOOT_MEM_RAM);
+		if (!dram0_mb)
+			break;
+
+		if (cpu_has_xks01) {
+			mb = min(dram0_mb, BRCM_MAX_UPPER_MB);
+			dram0_mb -= mb;
+
+			plat_wired_tlb_setup();
+			add_memory_region(UPPERMEM_START, mb << 20, BOOT_MEM_RAM);
+			if (!dram0_mb)
+				break;
+		}
+
+#ifdef CONFIG_HIGHMEM
+		add_memory_region(HIGHMEM_START, dram0_mb << 20, BOOT_MEM_RAM);
+		break;
+#endif
+		/* Linux memory */
+		mb = dram0_size_mb - dram0_mb;
+	} while (0);
+}
+
 static char __initdata cfe_buf[COMMAND_LINE_SIZE];
 
 static inline int __init parse_ulong(const char *buf, unsigned long *val)
@@ -230,6 +263,8 @@ void __init plat_mem_setup(void)
 			q->quirk_fn();
 		}
 	}
+
+	bmips_add_memory_regions();
 }
 
 void __init device_tree_init(void)
