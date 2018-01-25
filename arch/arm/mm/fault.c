@@ -23,8 +23,30 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
+#include <asm/cputype.h>
 
 #include "fault.h"
+
+#define __ACCESS_CP15(CRn, Op1, CRm, Op2)       \
+	"mrc", "mcr", __stringify(p15, Op1, %0, CRn, CRm, Op2), u32
+
+#define __write_sysreg(v, r, w, c, t)	asm volatile(w " " c : : "r" ((t)(v)))
+#define write_sysreg(v, ...)		__write_sysreg(v, __VA_ARGS__)
+
+#define BPIALL				__ACCESS_CP15(c7, 0, c5, 6)
+
+#define ARM_CPU_PART_CORTEX_A9		0x4100c090
+#define ARM_CPU_PART_MASK		0xff00fff0
+
+/*
+ * The CPU part number is meaningless without referring to the CPU
+ * implementer: implementers are free to define their own part numbers
+ * which are permitted to clash with other implementer part numbers.
+ */
+static inline unsigned int __attribute_const__ read_cpuid_part(void)
+{
+	return read_cpuid_id() & ARM_CPU_PART_MASK;
+}
 
 /*
  * Fault status register encodings.  We steal bit 31 for our own purposes.
@@ -371,6 +393,19 @@ no_context:
 	__do_kernel_fault(mm, addr, fsr, regs);
 	return 0;
 }
+static int
+do_pabt_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
+{
+	if (addr > TASK_SIZE) {
+		switch(read_cpuid_part()) {
+		case ARM_CPU_PART_CORTEX_A9:
+			write_sysreg(0, BPIALL);
+			break;
+		}
+	}
+
+	return do_page_fault(addr, fsr, regs);
+}
 #else					/* CONFIG_MMU */
 static int
 do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
@@ -577,7 +612,7 @@ static struct fsr_info ifsr_info[] = {
 	{ do_bad,		SIGBUS,  0,		"unknown 4"			   },
 	{ do_translation_fault,	SIGSEGV, SEGV_MAPERR,	"section translation fault"	   },
 	{ do_bad,		SIGSEGV, SEGV_ACCERR,	"page access flag fault"	   },
-	{ do_page_fault,	SIGSEGV, SEGV_MAPERR,	"page translation fault"	   },
+	{ do_pabt_page_fault,	SIGSEGV, SEGV_MAPERR,	"page translation fault"	   },
 	{ do_bad,		SIGBUS,	 0,		"external abort on non-linefetch"  },
 	{ do_bad,		SIGSEGV, SEGV_ACCERR,	"section domain fault"		   },
 	{ do_bad,		SIGBUS,  0,		"unknown 10"			   },
@@ -585,7 +620,7 @@ static struct fsr_info ifsr_info[] = {
 	{ do_bad,		SIGBUS,	 0,		"external abort on translation"	   },
 	{ do_sect_fault,	SIGSEGV, SEGV_ACCERR,	"section permission fault"	   },
 	{ do_bad,		SIGBUS,	 0,		"external abort on translation"	   },
-	{ do_page_fault,	SIGSEGV, SEGV_ACCERR,	"page permission fault"		   },
+	{ do_pabt_page_fault,	SIGSEGV, SEGV_ACCERR,	"page permission fault"		   },
 	{ do_bad,		SIGBUS,  0,		"unknown 16"			   },
 	{ do_bad,		SIGBUS,  0,		"unknown 17"			   },
 	{ do_bad,		SIGBUS,  0,		"unknown 18"			   },
