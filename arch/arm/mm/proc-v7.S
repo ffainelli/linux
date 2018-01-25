@@ -99,8 +99,13 @@ ENDPROC(cpu_v7_dcache_clean_area)
  *	It is assumed that:
  *	- we are not using split page tables
  */
-ENTRY(cpu_v7_switch_mm)
+ENTRY(cpu_v7_btbinv_switch_mm)
 #ifdef CONFIG_MMU
+	mov	r2, #0
+	mcr	p15, 0, r2, c7, c5, 6		@ flush BTAC/BTB
+#endif
+#ifdef CONFIG_MMU
+ENTRY(cpu_v7_switch_mm)
 	mov	r2, #0
 	ldr	r1, [r1, #MM_CONTEXT_ID]	@ get mm->context.id
 	ALT_SMP(orr	r0, r0, #TTB_FLAGS_SMP)
@@ -123,6 +128,7 @@ ENTRY(cpu_v7_switch_mm)
 #endif
 	mov	pc, lr
 ENDPROC(cpu_v7_switch_mm)
+ENDPROC(cpu_v7_btbinv_switch_mm)
 
 /*
  *	cpu_v7_set_pte_ext(ptep, pte)
@@ -424,7 +430,7 @@ ENTRY(v7_processor_functions)
 	.word	cpu_v7_reset
 	.word	cpu_v7_do_idle
 	.word	cpu_v7_dcache_clean_area
-	.word	cpu_v7_switch_mm
+	.word	cpu_v7_btbinv_switch_mm
 	.word	cpu_v7_set_pte_ext
 	.word	cpu_v7_suspend_size
 	.word	cpu_v7_do_suspend
