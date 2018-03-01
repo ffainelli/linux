@@ -597,7 +597,7 @@ static int dsa_cpu_port_get_sset_count(struct net_device *dev, int sset)
 		count += cpu_dp->ethtool_ops.get_sset_count(dev, sset);
 
 	if (sset == ETH_SS_STATS && ds->ops->get_sset_count)
-		count += ds->ops->get_sset_count(ds);
+		count += ds->ops->get_sset_count(ds, cpu_dp->index);
 
 	return count;
 }
@@ -631,7 +631,7 @@ static void dsa_cpu_port_get_strings(struct net_device *dev,
 		 * constructed earlier
 		 */
 		ds->ops->get_strings(ds, cpu_port, ndata);
-		count = ds->ops->get_sset_count(ds);
+		count = ds->ops->get_sset_count(ds, cpu_port);
 		for (i = 0; i < count; i++) {
 			memmove(ndata + (i * len + sizeof(pfx)),
 				ndata + i * len, len - sizeof(pfx));
@@ -680,7 +680,7 @@ static int dsa_slave_get_sset_count(struct net_device *dev, int sset)
 
 		count = 4;
 		if (ds->ops->get_sset_count)
-			count += ds->ops->get_sset_count(ds);
+			count += ds->ops->get_sset_count(ds, p->dp->index);
 
 		return count;
 	}
