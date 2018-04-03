@@ -837,7 +837,7 @@ void b53_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 		if (!phydev)
 			return;
 
-		phy_ethtool_get_strings(phydev, data);
+		phy_ethtool_get_strings(phydev, stringset, data);
 	}
 }
 EXPORT_SYMBOL(b53_get_strings);
@@ -899,7 +899,7 @@ int b53_get_sset_count(struct dsa_switch *ds, int port, int sset)
 		if (!phydev)
 			return 0;
 
-		return phy_ethtool_get_sset_count(phydev);
+		return phy_ethtool_get_sset_count(phydev, sset);
 	}
 
 	return 0;

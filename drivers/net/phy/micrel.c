@@ -666,14 +666,21 @@ static int ksz8873mll_config_aneg(struct phy_device *phydev)
 	return 0;
 }
 
-static int kszphy_get_sset_count(struct phy_device *phydev)
+static int kszphy_get_sset_count(struct phy_device *phydev, int sset)
 {
+	if (sset != ETH_SS_PHY_STATS)
+		return -EOPNOTSUPP;
+
 	return ARRAY_SIZE(kszphy_hw_stats);
 }
 
-static void kszphy_get_strings(struct phy_device *phydev, u8 *data)
+static void kszphy_get_strings(struct phy_device *phydev, u32 stringset,
+			       u8 *data)
 {
 	int i;
+
+	if (stringset != ETH_SS_PHY_STATS)
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(kszphy_hw_stats); i++) {
 		strlcpy(data + i * ETH_GSTRING_LEN,

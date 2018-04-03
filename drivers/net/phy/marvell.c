@@ -1464,17 +1464,24 @@ error:
 	return phy_restore_page(phydev, oldpage, err);
 }
 
-static int marvell_get_sset_count(struct phy_device *phydev)
+static int marvell_get_sset_count(struct phy_device *phydev, int sset)
 {
+	if (sset != ETH_SS_PHY_STATS)
+		return -EOPNOTSUPP;
+
 	if (phydev->supported & SUPPORTED_FIBRE)
 		return ARRAY_SIZE(marvell_hw_stats);
 	else
 		return ARRAY_SIZE(marvell_hw_stats) - NB_FIBER_STATS;
 }
 
-static void marvell_get_strings(struct phy_device *phydev, u8 *data)
+static void marvell_get_strings(struct phy_device *phydev, u32 stringset,
+				u8 *data)
 {
 	int i;
+
+	if (stringset != ETH_SS_PHY_STATS)
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(marvell_hw_stats); i++) {
 		strlcpy(data + i * ETH_GSTRING_LEN,

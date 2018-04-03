@@ -330,15 +330,21 @@ static const struct bcm_phy_hw_stat bcm_phy_hw_stats[] = {
 	{ "phy_remote_rcv_nok", MII_BRCM_CORE_BASE14, 0, 8 },
 };
 
-int bcm_phy_get_sset_count(struct phy_device *phydev)
+int bcm_phy_get_sset_count(struct phy_device *phydev, int sset)
 {
-	return ARRAY_SIZE(bcm_phy_hw_stats);
+	if (sset == ETH_SS_PHY_STATS)
+		return ARRAY_SIZE(bcm_phy_hw_stats);
+
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL_GPL(bcm_phy_get_sset_count);
 
-void bcm_phy_get_strings(struct phy_device *phydev, u8 *data)
+void bcm_phy_get_strings(struct phy_device *phydev, u32 stringset, u8 *data)
 {
 	unsigned int i;
+
+	if (stringset != ETH_SS_PHY_STATS)
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(bcm_phy_hw_stats); i++)
 		strlcpy(data + i * ETH_GSTRING_LEN,

@@ -547,6 +547,9 @@ struct bcm53xx_phy_priv {
 static int bcm53xx_phy_probe(struct phy_device *phydev)
 {
 	struct bcm53xx_phy_priv *priv;
+	int count;
+
+	count = bcm_phy_get_sset_count(phydev, ETH_SS_PHY_STATS);
 
 	priv = devm_kzalloc(&phydev->mdio.dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -554,8 +557,7 @@ static int bcm53xx_phy_probe(struct phy_device *phydev)
 
 	phydev->priv = priv;
 
-	priv->stats = devm_kcalloc(&phydev->mdio.dev,
-				   bcm_phy_get_sset_count(phydev), sizeof(u64),
+	priv->stats = devm_kcalloc(&phydev->mdio.dev, count, sizeof(u64),
 				   GFP_KERNEL);
 	if (!priv->stats)
 		return -ENOMEM;

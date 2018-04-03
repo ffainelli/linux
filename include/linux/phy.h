@@ -647,8 +647,8 @@ struct phy_driver {
 			     struct ethtool_eeprom *ee, u8 *data);
 
 	/* Get statistics from the phy using ethtool */
-	int (*get_sset_count)(struct phy_device *dev);
-	void (*get_strings)(struct phy_device *dev, u8 *data);
+	int (*get_sset_count)(struct phy_device *dev, int sset);
+	void (*get_strings)(struct phy_device *dev, u32 stringset, u8 *data);
 	void (*get_stats)(struct phy_device *dev,
 			  struct ethtool_stats *stats, u64 *data);
 
@@ -1069,19 +1069,21 @@ void mdio_bus_exit(void);
 #endif
 
 /* Inline function for use within net/core/ethtool.c (built-in) */
-static inline int phy_ethtool_get_strings(struct phy_device *phydev, u8 *data)
+static inline int phy_ethtool_get_strings(struct phy_device *phydev,
+					  u32 stringset, u8 *data)
 {
 	if (!phydev->drv)
 		return -EIO;
 
 	mutex_lock(&phydev->lock);
-	phydev->drv->get_strings(phydev, data);
+	phydev->drv->get_strings(phydev, stringset, data);
 	mutex_unlock(&phydev->lock);
 
 	return 0;
 }
 
-static inline int phy_ethtool_get_sset_count(struct phy_device *phydev)
+static inline int phy_ethtool_get_sset_count(struct phy_device *phydev,
+					     int sset)
 {
 	int ret;
 
@@ -1092,7 +1094,7 @@ static inline int phy_ethtool_get_sset_count(struct phy_device *phydev)
 	    phydev->drv->get_strings &&
 	    phydev->drv->get_stats) {
 		mutex_lock(&phydev->lock);
-		ret = phydev->drv->get_sset_count(phydev);
+		ret = phydev->drv->get_sset_count(phydev, sset);
 		mutex_unlock(&phydev->lock);
 
 		return ret;

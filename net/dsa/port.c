@@ -384,7 +384,7 @@ void dsa_port_link_unregister_of(struct dsa_port *dp)
 		dsa_port_setup_phy_of(dp, false);
 }
 
-int dsa_port_get_phy_strings(struct dsa_port *dp, uint8_t *data)
+int dsa_port_get_phy_strings(struct dsa_port *dp, u32 stringset, uint8_t *data)
 {
 	struct phy_device *phydev;
 	int ret = -EOPNOTSUPP;
@@ -396,7 +396,7 @@ int dsa_port_get_phy_strings(struct dsa_port *dp, uint8_t *data)
 	if (IS_ERR_OR_NULL(phydev))
 		return ret;
 
-	ret = phy_ethtool_get_strings(phydev, data);
+	ret = phy_ethtool_get_strings(phydev, stringset, data);
 	put_device(&phydev->mdio.dev);
 
 	return ret;
@@ -422,7 +422,7 @@ int dsa_port_get_ethtool_phy_stats(struct dsa_port *dp, uint64_t *data)
 }
 EXPORT_SYMBOL_GPL(dsa_port_get_ethtool_phy_stats);
 
-int dsa_port_get_phy_sset_count(struct dsa_port *dp)
+int dsa_port_get_phy_sset_count(struct dsa_port *dp, int sset)
 {
 	struct phy_device *phydev;
 	int ret = -EOPNOTSUPP;
@@ -434,7 +434,7 @@ int dsa_port_get_phy_sset_count(struct dsa_port *dp)
 	if (IS_ERR_OR_NULL(phydev))
 		return ret;
 
-	ret = phy_ethtool_get_sset_count(phydev);
+	ret = phy_ethtool_get_sset_count(phydev, sset);
 	put_device(&phydev->mdio.dev);
 
 	return ret;

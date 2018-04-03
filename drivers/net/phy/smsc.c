@@ -153,14 +153,20 @@ static int lan87xx_read_status(struct phy_device *phydev)
 	return err;
 }
 
-static int smsc_get_sset_count(struct phy_device *phydev)
+static int smsc_get_sset_count(struct phy_device *phydev, int sset)
 {
+	if (sset != ETH_SS_PHY_STATS)
+		return -EOPNOTSUPP;
+
 	return ARRAY_SIZE(smsc_hw_stats);
 }
 
-static void smsc_get_strings(struct phy_device *phydev, u8 *data)
+static void smsc_get_strings(struct phy_device *phydev, u32 stringset, u8 *data)
 {
 	int i;
+
+	if (stringset != ETH_SS_PHY_STATS)
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(smsc_hw_stats); i++) {
 		strncpy(data + i * ETH_GSTRING_LEN,

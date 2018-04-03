@@ -42,7 +42,8 @@ static void dsa_master_get_ethtool_phy_stats(struct net_device *dev,
 	int count = 0;
 
 	if (dev->phydev && !ops->get_ethtool_phy_stats) {
-		count = phy_ethtool_get_sset_count(dev->phydev);
+		count = phy_ethtool_get_sset_count(dev->phydev,
+						   ETH_SS_PHY_STATS);
 		if (count >= 0)
 			phy_ethtool_get_stats(dev->phydev, stats, data);
 	} else if (ops->get_sset_count && ops->get_ethtool_phy_stats) {
@@ -66,7 +67,7 @@ static int dsa_master_get_sset_count(struct net_device *dev, int sset)
 
 	if (sset == ETH_SS_PHY_STATS && dev->phydev &&
 	    !ops->get_ethtool_phy_stats)
-		count = phy_ethtool_get_sset_count(dev->phydev);
+		count = phy_ethtool_get_sset_count(dev->phydev, sset);
 	else if (ops->get_sset_count)
 		count = ops->get_sset_count(dev, sset);
 
@@ -98,11 +99,11 @@ static void dsa_master_get_strings(struct net_device *dev, uint32_t stringset,
 
 	if (stringset == ETH_SS_PHY_STATS && dev->phydev &&
 	    !ops->get_ethtool_phy_stats) {
-		mcount = phy_ethtool_get_sset_count(dev->phydev);
+		mcount = phy_ethtool_get_sset_count(dev->phydev, stringset);
 		if (mcount < 0)
 			mcount = 0;
 		else
-			phy_ethtool_get_strings(dev->phydev, data);
+			phy_ethtool_get_strings(dev->phydev, stringset, data);
 	} else if (ops->get_sset_count && ops->get_strings) {
 		mcount = ops->get_sset_count(dev, stringset);
 		if (mcount < 0)

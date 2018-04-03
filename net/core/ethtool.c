@@ -230,7 +230,7 @@ static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 
 	if (sset == ETH_SS_PHY_STATS && dev->phydev &&
 	    !ops->get_ethtool_phy_stats)
-		return phy_ethtool_get_sset_count(dev->phydev);
+		return phy_ethtool_get_sset_count(dev->phydev, sset);
 
 	if (ops->get_sset_count && ops->get_strings)
 		return ops->get_sset_count(dev, sset);
@@ -255,7 +255,7 @@ static void __ethtool_get_strings(struct net_device *dev,
 		memcpy(data, phy_tunable_strings, sizeof(phy_tunable_strings));
 	else if (stringset == ETH_SS_PHY_STATS && dev->phydev &&
 		 !ops->get_ethtool_phy_stats)
-		phy_ethtool_get_strings(dev->phydev, data);
+		phy_ethtool_get_strings(dev->phydev, stringset, data);
 	else
 		/* ops->get_strings is valid because checked earlier */
 		ops->get_strings(dev, stringset, data);
@@ -1983,7 +1983,8 @@ static int ethtool_get_phy_stats(struct net_device *dev, void __user *useraddr)
 		return -EOPNOTSUPP;
 
 	if (dev->phydev && !ops->get_ethtool_phy_stats)
-		n_stats = phy_ethtool_get_sset_count(dev->phydev);
+		n_stats = phy_ethtool_get_sset_count(dev->phydev,
+						     ETH_SS_PHY_STATS);
 	else
 		n_stats = ops->get_sset_count(dev, ETH_SS_PHY_STATS);
 	if (n_stats < 0)
