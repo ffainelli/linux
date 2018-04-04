@@ -165,6 +165,19 @@ static inline const char *phy_modes(phy_interface_t interface)
 	}
 }
 
+enum phy_std_test_mode {
+	PHY_STD_TEST_MODE_BASE = 0,
+	PHY_STD_TEST_MODE_100BASET2_1 = PHY_STD_TEST_MODE_BASE,
+	PHY_STD_TEST_MODE_100BASET2_2,
+	PHY_STD_TEST_MODE_100BASET2_3,
+	PHY_STD_TEST_MODE_100BASET2_MAX = PHY_STD_TEST_MODE_100BASET2_3,
+	PHY_STD_TEST_MODE_1000BASET_1,
+	PHY_STD_TEST_MODE_1000BASET_2,
+	PHY_STD_TEST_MODE_1000BASET_3,
+	PHY_STD_TEST_MODE_1000BASET_4,
+	PHY_STD_TEST_MODE_MAX,
+	/* PHY drivers can implement their own test modes after that value */
+};
 
 #define PHY_INIT_TIMEOUT	100000
 #define PHY_STATE_TIME		1
@@ -999,6 +1012,14 @@ int genphy_read_mmd_unsupported(struct phy_device *phdev, int devad,
 				u16 regnum);
 int genphy_write_mmd_unsupported(struct phy_device *phdev, int devnum,
 				 u16 regnum, u16 val);
+
+int genphy_get_test(struct phy_device *phydev, struct ethtool_phy_test *t,
+		    u8 *data);
+int genphy_set_test(struct phy_device *phydev, struct ethtool_phy_test *t,
+		    const u8 *data);
+int genphy_get_test_count(struct phy_device *phydev);
+void genphy_get_test_strings(struct phy_device *phydev, u8 *data);
+int genphy_get_test_len(struct phy_device *phydev, struct ethtool_phy_test *t);
 
 /* Clause 45 PHY */
 int genphy_c45_restart_aneg(struct phy_device *phydev);

@@ -207,6 +207,12 @@ config LED_TRIGGER_PHY
 		<Speed in megabits>Mbps OR <Speed in gigabits>Gbps OR link
 		for any speed known to the PHY.
 
+config CONFIG_PHYLIB_TEST_MODES
+	bool "Support for test modes"
+	---help---
+	  Selecting this option will allow the PHY library to support
+	  test modes: electrical, cable diagnostics, pattern generator etc.
+
 
 comment "MII PHY device drivers"
 
