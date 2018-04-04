@@ -315,6 +315,10 @@ bool ethtool_convert_link_mode_to_legacy_u32(u32 *legacy_u32,
  * @get_ethtool_phy_stats: Return extended statistics about the PHY device.
  *	This is only useful if the device maintains PHY statistics and
  *	cannot use the standard PHY library helpers.
+ * @get_phy_test_len: Get the network device's PHY test specific payload
+ *	length
+ * @get_phy_test: Get the network device's PHY test (and associated data).
+ * @set_phy_test: Set the network device's PHY under test.
  *
  * All operations are optional (i.e. the function pointer may be set
  * to %NULL) and callers must take this into account.  Callers must
@@ -412,5 +416,12 @@ struct ethtool_ops {
 				      struct ethtool_fecparam *);
 	void	(*get_ethtool_phy_stats)(struct net_device *,
 					 struct ethtool_stats *, u64 *);
+	int	(*get_phy_test_len)(struct net_device *,
+				    struct ethtool_phy_test *);
+	int	(*get_phy_test)(struct net_device *,
+				struct ethtool_phy_test *, u8 *);
+	int	(*set_phy_test)(struct net_device *,
+				struct ethtool_phy_test *,
+				const u8 *);
 };
 #endif /* _LINUX_ETHTOOL_H */

@@ -1277,3 +1277,82 @@ int phy_ethtool_nway_reset(struct net_device *ndev)
 	return phy_restart_aneg(phydev);
 }
 EXPORT_SYMBOL(phy_ethtool_nway_reset);
+
+int phy_ethtool_get_test_len(struct net_device *ndev,
+			     struct ethtool_phy_test *test)
+{
+	struct phy_device *phydev = ndev->phydev;
+	int ret;
+
+	if (!phydev)
+		return -ENODEV;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	mutex_lock(&phydev->lock);
+	ret = phydev->drv->get_test_len(phydev, test);
+	mutex_unlock(&phydev->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(phy_ethtool_get_test_len);
+
+int phy_ethtool_get_test(struct net_device *ndev,
+			 struct ethtool_phy_test *test, u8 *data)
+{
+	struct phy_device *phydev = ndev->phydev;
+	int ret;
+
+	if (!phydev)
+		return -ENODEV;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	mutex_lock(&phydev->lock);
+	ret = phydev->drv->get_test(phydev, test, data);
+	mutex_unlock(&phydev->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(phy_ethtool_get_test);
+
+int phy_ethtool_set_test(struct net_device *ndev,
+			 struct ethtool_phy_test *test, const u8 *data)
+{
+	struct phy_device *phydev = ndev->phydev;
+	int ret;
+
+	if (!phydev)
+		return -ENODEV;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	if (test->flags & ETH_TEST_FL_START) {
+		phy_stop(phydev);
+		phydev->attached_dev->operstate = IF_OPER_TESTING;
+	}
+
+	mutex_lock(&phydev->lock);
+	ret = phydev->drv->set_test(phydev, test, data);
+	mutex_unlock(&phydev->lock);
+
+	if (ret < 0) {
+		test->flags |= ETH_TEST_FL_FAILED;
+		goto out_err;
+	}
+
+	if (test->flags & ETH_TEST_FL_STOP)
+		goto out_err;
+
+	return ret;
+
+out_err:
+	phy_init_hw(phydev);
+	phy_start(phydev);
+	return ret;
+}
+EXPORT_SYMBOL(phy_ethtool_set_test);
+

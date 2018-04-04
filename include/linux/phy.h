@@ -375,6 +375,7 @@ struct phy_c45_device_ids {
  * suspended: Set to true if this phy has been suspended successfully.
  * sysfs_links: Internal boolean tracking sysfs symbolic links setup/removal.
  * loopback_enabled: Set true if this phy has been loopbacked successfully.
+ * phy_test: Current ethtool PHY test scratch area.
  * state: state of the PHY for management purposes
  * dev_flags: Device-specific flags used by the PHY driver.
  * link_timeout: The number of timer firings to wait before the
@@ -413,6 +414,7 @@ struct phy_device {
 	bool suspended;
 	bool sysfs_links;
 	bool loopback_enabled;
+	struct ethtool_phy_test phy_test;
 
 	enum phy_state state;
 
@@ -659,6 +661,15 @@ struct phy_driver {
 			    struct ethtool_tunable *tuna,
 			    const void *data);
 	int (*set_loopback)(struct phy_device *dev, bool enable);
+
+	/* Get and Set PHY test modes */
+	int (*get_test_len)(struct phy_device *dev,
+			    struct ethtool_phy_test *test);
+	int (*get_test)(struct phy_device *dev,
+			struct ethtool_phy_test *test, u8 *data);
+	int (*set_test)(struct phy_device *dev,
+			struct ethtool_phy_test *test,
+			const u8 *data);
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
@@ -1062,6 +1073,12 @@ int phy_ethtool_get_link_ksettings(struct net_device *ndev,
 int phy_ethtool_set_link_ksettings(struct net_device *ndev,
 				   const struct ethtool_link_ksettings *cmd);
 int phy_ethtool_nway_reset(struct net_device *ndev);
+int phy_ethtool_get_test_len(struct net_device *ndev,
+			     struct ethtool_phy_test *test);
+int phy_ethtool_get_test(struct net_device *ndev,
+			 struct ethtool_phy_test *test, u8 *data);
+int phy_ethtool_set_test(struct net_device *ndev,
+			 struct ethtool_phy_test *test, const u8 *data);
 
 #if IS_ENABLED(CONFIG_PHYLIB)
 int __init mdio_bus_init(void);
@@ -1090,9 +1107,11 @@ static inline int phy_ethtool_get_sset_count(struct phy_device *phydev,
 	if (!phydev->drv)
 		return -EIO;
 
-	if (phydev->drv->get_sset_count &&
-	    phydev->drv->get_strings &&
-	    phydev->drv->get_stats) {
+	if (!phydev->drv->get_sset_count || !phydev->drv->get_strings)
+		return -EOPNOTSUPP;
+
+	if (phydev->drv->get_stats || phydev->drv->get_test_len ||
+	    phydev->drv->get_test || phydev->drv->set_test) {
 		mutex_lock(&phydev->lock);
 		ret = phydev->drv->get_sset_count(phydev, sset);
 		mutex_unlock(&phydev->lock);
