@@ -619,6 +619,9 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.get_sset_count	= bcm_phy_get_sset_count,			\
 	.get_strings	= bcm_phy_get_strings,				\
 	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
+	.set_test	= genphy_set_test,				\
+	.get_test	= genphy_get_test,				\
+	.get_test_len	= genphy_get_test_len,				\
 	.probe		= bcm7xxx_28nm_probe,				\
 }
 

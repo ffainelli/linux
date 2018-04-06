@@ -334,6 +334,8 @@ int bcm_phy_get_sset_count(struct phy_device *phydev, int sset)
 {
 	if (sset == ETH_SS_PHY_STATS)
 		return ARRAY_SIZE(bcm_phy_hw_stats);
+	else if (sset == ETH_SS_PHY_TESTS)
+		return genphy_get_test_count(phydev);
 
 	return -EOPNOTSUPP;
 }
@@ -343,12 +345,13 @@ void bcm_phy_get_strings(struct phy_device *phydev, u32 stringset, u8 *data)
 {
 	unsigned int i;
 
-	if (stringset != ETH_SS_PHY_STATS)
-		return;
-
-	for (i = 0; i < ARRAY_SIZE(bcm_phy_hw_stats); i++)
-		strlcpy(data + i * ETH_GSTRING_LEN,
-			bcm_phy_hw_stats[i].string, ETH_GSTRING_LEN);
+	if (stringset == ETH_SS_PHY_STATS) {
+		for (i = 0; i < ARRAY_SIZE(bcm_phy_hw_stats); i++)
+			strlcpy(data + i * ETH_GSTRING_LEN,
+				bcm_phy_hw_stats[i].string, ETH_GSTRING_LEN);
+	} else if (stringset == ETH_SS_PHY_TESTS) {
+		genphy_get_test_strings(phydev, data);
+	}
 }
 EXPORT_SYMBOL_GPL(bcm_phy_get_strings);
 
