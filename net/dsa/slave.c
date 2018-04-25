@@ -563,7 +563,8 @@ static void dsa_slave_get_strings(struct net_device *dev,
 		strncpy(data + 2 * len, "rx_packets", len);
 		strncpy(data + 3 * len, "rx_bytes", len);
 		if (ds->ops->get_strings)
-			ds->ops->get_strings(ds, p->dp->index, data + 4 * len);
+			ds->ops->get_strings(ds, p->dp->index,
+					     stringset, data + 4 * len);
 	}
 }
 
@@ -593,11 +594,14 @@ static int dsa_cpu_port_get_sset_count(struct net_device *dev, int sset)
 	struct dsa_switch *ds = cpu_dp->ds;
 	int count = 0;
 
-	if (cpu_dp->ethtool_ops.get_sset_count)
+	if (cpu_dp->ethtool_ops.get_sset_count) {
 		count += cpu_dp->ethtool_ops.get_sset_count(dev, sset);
+		if (count < 0)
+			count = 0;
+	}
 
-	if (sset == ETH_SS_STATS && ds->ops->get_sset_count)
-		count += ds->ops->get_sset_count(ds, cpu_dp->index);
+	if (ds->ops->get_sset_count)
+		count += ds->ops->get_sset_count(ds, cpu_dp->index, sset);
 
 	return count;
 }
@@ -620,18 +624,20 @@ static void dsa_cpu_port_get_strings(struct net_device *dev,
 	pfx[sizeof(pfx) - 1] = '_';
 
 	if (cpu_dp->ethtool_ops.get_sset_count) {
-		mcount = cpu_dp->ethtool_ops.get_sset_count(dev, ETH_SS_STATS);
+		mcount = cpu_dp->ethtool_ops.get_sset_count(dev, stringset);
+		if (mcount < 0)
+			mcount = 0;
 		cpu_dp->ethtool_ops.get_strings(dev, stringset, data);
 	}
 
-	if (stringset == ETH_SS_STATS && ds->ops->get_strings) {
+	if (ds->ops->get_strings) {
 		ndata = data + mcount * len;
 		/* This function copies ETH_GSTRINGS_LEN bytes, we will mangle
 		 * the output after to prepend our CPU port prefix we
 		 * constructed earlier
 		 */
-		ds->ops->get_strings(ds, cpu_port, ndata);
-		count = ds->ops->get_sset_count(ds, cpu_port);
+		ds->ops->get_strings(ds, cpu_port, stringset, ndata);
+		count = ds->ops->get_sset_count(ds, cpu_port, stringset);
 		for (i = 0; i < count; i++) {
 			memmove(ndata + (i * len + sizeof(pfx)),
 				ndata + i * len, len - sizeof(pfx));
@@ -680,7 +686,7 @@ static int dsa_slave_get_sset_count(struct net_device *dev, int sset)
 
 		count = 4;
 		if (ds->ops->get_sset_count)
-			count += ds->ops->get_sset_count(ds, p->dp->index);
+			count += ds->ops->get_sset_count(ds, p->dp->index, sset);
 
 		return count;
 	}

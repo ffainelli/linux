@@ -658,9 +658,12 @@ static void mv88e6320_stats_get_strings(struct mv88e6xxx_chip *chip,
 }
 
 static void mv88e6xxx_get_strings(struct dsa_switch *ds, int port,
-				  uint8_t *data)
+				  u32 stringset, uint8_t *data)
 {
 	struct mv88e6xxx_chip *chip = ds->priv;
+
+	if (stringset != ETH_SS_STATS)
+		return;
 
 	if (chip->info->ops->stats_get_strings)
 		chip->info->ops->stats_get_strings(chip, data);
@@ -692,9 +695,12 @@ static int mv88e6320_stats_get_sset_count(struct mv88e6xxx_chip *chip)
 					      STATS_TYPE_BANK1);
 }
 
-static int mv88e6xxx_get_sset_count(struct dsa_switch *ds, int port)
+static int mv88e6xxx_get_sset_count(struct dsa_switch *ds, int port, int sset)
 {
 	struct mv88e6xxx_chip *chip = ds->priv;
+
+	if (sset != ETH_SS_STATS)
+		return 0;
 
 	if (chip->info->ops->stats_get_sset_count)
 		return chip->info->ops->stats_get_sset_count(chip);
