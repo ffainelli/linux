@@ -654,6 +654,14 @@ struct phy_driver {
 			    struct ethtool_tunable *tuna,
 			    const void *data);
 	int (*set_loopback)(struct phy_device *dev, bool enable);
+
+	/* Get and Set PHY test modes */
+	int (*get_test_len)(struct phy_device *dev, u32 mode);
+	int (*get_test)(struct phy_device *dev,
+			struct ethtool_phy_test *test, u8 *data);
+	int (*set_test)(struct phy_device *dev,
+			struct ethtool_phy_test *test,
+			const u8 *data);
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
@@ -961,9 +969,11 @@ static inline int phy_ethtool_get_sset_count(struct phy_device *phydev,
 	if (!phydev->drv)
 		return -EIO;
 
-	if (phydev->drv->get_sset_count &&
-	    phydev->drv->get_strings &&
-	    phydev->drv->get_stats) {
+	if (!phydev->drv->get_sset_count || !phydev->drv->get_strings)
+		return -EOPNOTSUPP;
+
+	if (phydev->drv->get_stats || phydev->drv->get_test_len ||
+	    phydev->drv->get_test || phydev->drv->set_test) {
 		mutex_lock(&phydev->lock);
 		ret = phydev->drv->get_sset_count(phydev, sset);
 		mutex_unlock(&phydev->lock);
@@ -985,6 +995,53 @@ static inline int phy_ethtool_get_stats(struct phy_device *phydev,
 	mutex_unlock(&phydev->lock);
 
 	return 0;
+}
+
+static inline int phy_ethtool_get_test_len(struct phy_device *phydev,
+					   u32 mode)
+{
+	int ret;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	mutex_lock(&phydev->lock);
+	ret = phydev->drv->get_test_len(phydev, mode);
+	mutex_unlock(&phydev->lock);
+
+	return ret;
+}
+
+static inline int phy_ethtool_get_test(struct phy_device *phydev,
+				       struct ethtool_phy_test *test,
+				       u8 *data)
+{
+	int ret;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	mutex_lock(&phydev->lock);
+	ret = phydev->drv->get_test(phydev, test, data);
+	mutex_unlock(&phydev->lock);
+
+	return ret;
+}
+
+static inline int phy_ethtool_set_test(struct phy_device *phydev,
+				       struct ethtool_phy_test *test,
+				       const u8 *data)
+{
+	int ret;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	mutex_lock(&phydev->lock);
+	ret = phydev->drv->set_test(phydev, test, data);
+	mutex_unlock(&phydev->lock);
+
+	return ret;
 }
 
 extern struct bus_type mdio_bus_type;

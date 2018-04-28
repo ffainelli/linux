@@ -222,8 +222,9 @@ static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 	if (sset == ETH_SS_PHY_TUNABLES)
 		return ARRAY_SIZE(phy_tunable_strings);
 
-	if (sset == ETH_SS_PHY_STATS && dev->phydev &&
-	    !ops->get_ethtool_phy_stats)
+	if ((sset == ETH_SS_PHY_STATS && dev->phydev &&
+	    !ops->get_ethtool_phy_stats) ||
+	    (sset == ETH_SS_PHY_TESTS && dev->phydev))
 		return phy_ethtool_get_sset_count(dev->phydev, sset);
 
 	if (ops->get_sset_count && ops->get_strings)
@@ -247,8 +248,9 @@ static void __ethtool_get_strings(struct net_device *dev,
 		memcpy(data, tunable_strings, sizeof(tunable_strings));
 	else if (stringset == ETH_SS_PHY_TUNABLES)
 		memcpy(data, phy_tunable_strings, sizeof(phy_tunable_strings));
-	else if (stringset == ETH_SS_PHY_STATS && dev->phydev &&
-		 !ops->get_ethtool_phy_stats)
+	else if ((stringset == ETH_SS_PHY_STATS && dev->phydev &&
+		 !ops->get_ethtool_phy_stats) ||
+		 (stringset == ETH_SS_PHY_TESTS && dev->phydev))
 		phy_ethtool_get_strings(dev->phydev, stringset, data);
 	else
 		/* ops->get_strings is valid because checked earlier */
@@ -1969,6 +1971,68 @@ static int ethtool_get_phy_stats(struct net_device *dev, void __user *useraddr)
 	return ret;
 }
 
+static int ethtool_get_phy_test(struct net_device *dev, void __user *useraddr)
+{
+	struct phy_device *phydev = dev->phydev;
+	struct ethtool_phy_test test;
+	int ret, test_len;
+	void *data;
+
+	if (!phydev)
+		return -EOPNOTSUPP;
+
+	if (copy_from_user(&test, useraddr, sizeof(test)))
+		return -EFAULT;
+
+	test_len = phy_ethtool_get_test_len(phydev, test.mode);
+	if (test_len < 0)
+		return test_len;
+
+	test.len = test_len;
+	data = kmalloc(test_len, GFP_USER);
+	if (test_len && !data)
+		return -ENOMEM;
+
+	ret = phy_ethtool_get_test(phydev, &test, data);
+	if (ret < 0)
+		goto out;
+
+	ret = -EFAULT;
+	if (copy_to_user(useraddr, &test, sizeof(test)))
+		goto out;
+	useraddr += sizeof(test);
+	if (test_len && copy_to_user(useraddr, data, test_len))
+		goto out;
+	ret = 0;
+out:
+	kfree(data);
+	return ret;
+}
+
+static int ethtool_set_phy_test(struct net_device *dev, void __user *useraddr)
+{
+	struct phy_device *phydev = dev->phydev;
+	struct ethtool_phy_test test;
+	void *data;
+	int ret;
+
+	if (!phydev)
+		return -EOPNOTSUPP;
+
+	if (copy_from_user(&test, useraddr, sizeof(test)))
+		return -EFAULT;
+
+	useraddr += sizeof(test);
+	data = memdup_user(useraddr, test.len);
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	ret = phy_ethtool_set_test(phydev, &test, data);
+
+	kfree(data);
+	return ret;
+}
+
 static int ethtool_get_perm_addr(struct net_device *dev, void __user *useraddr)
 {
 	struct ethtool_perm_addr epaddr;
@@ -2581,6 +2645,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_PHY_GTUNABLE:
 	case ETHTOOL_GLINKSETTINGS:
 	case ETHTOOL_GFECPARAM:
+	case ETHTOOL_GPHYTEST:
 		break;
 	default:
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
@@ -2795,6 +2860,12 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 		break;
 	case ETHTOOL_SFECPARAM:
 		rc = ethtool_set_fecparam(dev, useraddr);
+		break;
+	case ETHTOOL_GPHYTEST:
+		rc = ethtool_get_phy_test(dev, useraddr);
+		break;
+	case ETHTOOL_SPHYTEST:
+		rc = ethtool_set_phy_test(dev, useraddr);
 		break;
 	default:
 		rc = -EOPNOTSUPP;
