@@ -587,6 +587,9 @@ static void bcm7xxx_28nm_get_phy_stats(struct phy_device *phydev,
 static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 {
 	struct bcm7xxx_phy_priv *priv;
+	int count;
+
+	count = bcm_phy_get_sset_count(phydev, ETH_SS_PHY_STATS);
 
 	priv = devm_kzalloc(&phydev->mdio.dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -594,8 +597,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 
 	phydev->priv = priv;
 
-	priv->stats = devm_kcalloc(&phydev->mdio.dev,
-				   bcm_phy_get_sset_count(phydev), sizeof(u64),
+	priv->stats = devm_kcalloc(&phydev->mdio.dev, count, sizeof(u64),
 				   GFP_KERNEL);
 	if (!priv->stats)
 		return -ENOMEM;

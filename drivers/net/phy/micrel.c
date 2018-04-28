@@ -651,14 +651,21 @@ ksz9021_wr_mmd_phyreg(struct phy_device *phydev, int devad, u16 regnum, u16 val)
 	return -1;
 }
 
-static int kszphy_get_sset_count(struct phy_device *phydev)
+static int kszphy_get_sset_count(struct phy_device *phydev, int sset)
 {
+	if (sset != ETH_SS_PHY_STATS)
+		return -EOPNOTSUPP;
+
 	return ARRAY_SIZE(kszphy_hw_stats);
 }
 
-static void kszphy_get_strings(struct phy_device *phydev, u8 *data)
+static void kszphy_get_strings(struct phy_device *phydev, u32 stringset,
+			       u8 *data)
 {
 	int i;
+
+	if (stringset != ETH_SS_PHY_STATS)
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(kszphy_hw_stats); i++) {
 		memcpy(data + i * ETH_GSTRING_LEN,

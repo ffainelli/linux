@@ -42,8 +42,8 @@ int bcm_phy_downshift_get(struct phy_device *phydev, u8 *count);
 
 int bcm_phy_downshift_set(struct phy_device *phydev, u8 count);
 
-int bcm_phy_get_sset_count(struct phy_device *phydev);
-void bcm_phy_get_strings(struct phy_device *phydev, u8 *data);
+int bcm_phy_get_sset_count(struct phy_device *phydev, int sset);
+void bcm_phy_get_strings(struct phy_device *phydev, u32 stringset, u8 *data);
 void bcm_phy_get_stats(struct phy_device *phydev, u64 *shadow,
 		       struct ethtool_stats *stats, u64 *data);
 
