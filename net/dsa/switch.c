@@ -210,7 +210,7 @@ static int dsa_switch_vlan_add(struct dsa_switch *ds,
 	if (ds->index == info->sw_index)
 		set_bit(info->port, ds->bitmap);
 	for (port = 0; port < ds->num_ports; port++)
-		if (dsa_is_cpu_port(ds, port) || dsa_is_dsa_port(ds, port))
+		if (dsa_is_dsa_port(ds, port))
 			set_bit(port, ds->bitmap);
 
 	if (switchdev_trans_ph_prepare(trans))
