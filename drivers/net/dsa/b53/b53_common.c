@@ -28,6 +28,9 @@
 #include <linux/phy.h>
 #include <linux/etherdevice.h>
 #include <linux/if_bridge.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+#include <linux/ctype.h>
 #include <net/dsa.h>
 
 #include "b53_regs.h"
@@ -1484,6 +1487,184 @@ void b53_mirror_del(struct dsa_switch *ds, int port,
 }
 EXPORT_SYMBOL(b53_mirror_del);
 
+static int b53_regs_show(struct seq_file *s, void *p)
+{
+	struct dsa_switch *ds = s->private;
+	struct b53_device *dev = ds->priv;
+	u64 val64;
+	u32 val32;
+	u16 val16;
+	u8 val8;
+
+	mutex_lock(&dev->dbg_mutex);
+
+	seq_printf(s, "page: 0x%02x, offset: 0x%02x, len: %d\n",
+		   dev->dbg_page, dev->dbg_offset, dev->dbg_len);
+	switch (dev->dbg_len) {
+	case 1:
+		b53_read8(dev, dev->dbg_page, dev->dbg_offset, &val8);
+		seq_printf(s, "val: 0x%02x\n", val8);
+		break;
+	case 2:
+		b53_read16(dev, dev->dbg_page, dev->dbg_offset, &val16);
+		seq_printf(s, "val: 0x%04x\n", val16);
+		break;
+	case 4:
+		b53_read32(dev, dev->dbg_page, dev->dbg_offset, &val32);
+		seq_printf(s, "val: 0x%08x\n", val32);
+		break;
+	case 6:
+		b53_read48(dev, dev->dbg_page, dev->dbg_offset, &val64);
+		seq_printf(s, "val: 0x%12llx\n", val64);
+		break;
+	case 8:
+		b53_read64(dev, dev->dbg_page, dev->dbg_offset, &val64);
+		seq_printf(s, "val: 0x%16llx\n", val64);
+		break;
+	}
+
+	mutex_unlock(&dev->dbg_mutex);
+
+	return 0;
+}
+
+static void str_to_num(const char *in, char *out, int len)
+{
+	unsigned int i;
+
+	memset(out, 0, len);
+
+	for (i = 0; i < len * 2; i++) {
+		if ((*in >= '0') && (*in <= '9'))
+			*out += (*in - '0');
+		else if ((*in >= 'a') && (*in <= 'f'))
+			*out += (*in - 'a') + 10;
+		else if ((*in >= 'A') && (*in <= 'F'))
+			*out += (*in - 'A') + 10;
+		else
+			*out += 0;
+
+		if ((i % 2) == 0)
+			*out *= 16;
+		else
+			out++;
+
+		in++;
+	}
+}
+
+static ssize_t b53_regs_write(struct file *file, const char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct dsa_switch *ds = s->private;
+	struct b53_device *dev = ds->priv;
+	unsigned int i, octets;
+	char input[32], cmd[16];
+	u64 *val64;
+	u32 *val32;
+	u16 *val16;
+	int r, ret;
+
+	if (copy_from_user(input, buf, count) != 0)
+		return -EFAULT;
+
+	r = count;
+
+	for (i = 0; i < r; i++) {
+		if (!isxdigit(input[i])) {
+			memmove(&input[i], &input[i + 1], r - i - 1);
+			r--;
+			i--;
+		}
+	}
+
+	octets = r / 2;
+
+	/* Need at least page, offset, length */
+	if (octets < 3)
+		return -EINVAL;
+
+	str_to_num(input, cmd, octets);
+
+	mutex_lock(&dev->dbg_mutex);
+	dev->dbg_page = cmd[0];
+	dev->dbg_offset = cmd[1];
+	dev->dbg_len = cmd[2];
+
+	if ((dev->dbg_len != 1 && dev->dbg_len % 2 != 0) || dev->dbg_len > 8) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (octets == 3)
+		goto out;
+
+	if (octets > 3 && (octets != dev->dbg_len + 3)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (dev->dbg_page > 0xf0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	switch (dev->dbg_len) {
+	case 1:
+		b53_write8(dev, dev->dbg_page, dev->dbg_offset, cmd[3]);
+		break;
+	case 2:
+		val16 = (u16 *)&cmd[3];
+		b53_write16(dev, dev->dbg_page, dev->dbg_offset,
+			    be16_to_cpu(*val16));
+		break;
+	case 4:
+		val32 = (u32 *)&cmd[3];
+		b53_write32(dev, dev->dbg_page, dev->dbg_offset,
+			    be32_to_cpu(*val32));
+		break;
+	case 6:
+	case 8:
+		val64 = (u64 *)&cmd[3];
+		b53_write64(dev, dev->dbg_page, dev->dbg_offset,
+			    be64_to_cpu(*val64));
+		break;
+	}
+out:
+	mutex_unlock(&dev->dbg_mutex);
+	return count;
+}
+
+static int b53_regs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, b53_regs_show, inode->i_private);
+}
+
+static const struct file_operations b53_regs_ops = {
+	.open	= b53_regs_open,
+	.read	= seq_read,
+	.write	= b53_regs_write,
+	.llseek	= no_llseek,
+	.release = single_release,
+	.owner = THIS_MODULE,
+};
+
+static void b53_debugfs_init(struct dsa_switch *ds)
+{
+	struct b53_device *dev = ds->priv;
+	char *name;
+
+	name = kasprintf(GFP_KERNEL, "dsa%d", ds->index);
+	if (!name)
+		return;
+	dev->dbgfs = debugfs_create_dir(name, NULL);
+	kfree(name);
+
+	debugfs_create_file("regs", S_IRUGO | S_IWUSR,
+			    dev->dbgfs, ds, &b53_regs_ops);
+}
+
 static const struct dsa_switch_ops b53_switch_ops = {
 	.get_tag_protocol	= b53_get_tag_protocol,
 	.setup			= b53_setup,
@@ -1843,6 +2024,7 @@ struct b53_device *b53_switch_alloc(struct device *base,
 	ds->ops = &b53_switch_ops;
 	mutex_init(&dev->reg_mutex);
 	mutex_init(&dev->stats_mutex);
+	mutex_init(&dev->dbg_mutex);
 
 	return dev;
 }
@@ -1931,7 +2113,11 @@ int b53_switch_register(struct b53_device *dev)
 
 	pr_info("found switch: %s, rev %i\n", dev->name, dev->core_rev);
 
-	return dsa_register_switch(dev->ds);
+	ret = dsa_register_switch(dev->ds);
+	if (!ret)
+		b53_debugfs_init(dev->ds);
+
+	return ret;
 }
 EXPORT_SYMBOL(b53_switch_register);
 

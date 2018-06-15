@@ -117,6 +117,12 @@ struct b53_device {
 	struct b53_vlan *vlans;
 	unsigned int num_ports;
 	struct b53_port *ports;
+
+	struct dentry *dbgfs;
+	struct mutex dbg_mutex;
+	u8 dbg_page;
+	u8 dbg_offset;
+	u8 dbg_len;
 };
 
 #define b53_for_each_port(dev, i) \
