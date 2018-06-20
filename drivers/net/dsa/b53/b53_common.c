@@ -1650,6 +1650,109 @@ static const struct file_operations b53_regs_ops = {
 	.owner = THIS_MODULE,
 };
 
+static int b53_fdb_show_cb(const unsigned char *addr, u16 vid,
+			   bool is_static, void *data)
+{
+	struct seq_file *s = data;
+
+	seq_printf(s, "\t%pM VLAN: %d, static: %s\n",
+		   addr, vid, is_static ? "Yes" : "No");
+
+	return 0;
+}
+
+static int b53_fdb_show(struct seq_file *s, void *p)
+{
+	struct dsa_switch *ds = s->private;
+	struct b53_device *dev = ds->priv;
+	unsigned int port;
+
+	mutex_lock(&dev->dbg_mutex);
+	for (port = 0; port < ds->num_ports; port++) {
+		if ((BIT(port) & ds->enabled_port_mask) ||
+		    dsa_is_cpu_port(ds, port)) {
+			seq_printf(s, "FDB dump for port %d\n", port);
+			b53_fdb_dump(ds, port, b53_fdb_show_cb, s);
+		}
+	}
+	mutex_unlock(&dev->dbg_mutex);
+
+	return 0;
+}
+
+static int b53_fdb_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, b53_fdb_show, inode->i_private);
+}
+
+static const struct file_operations b53_fdb_ops = {
+	.open	= b53_fdb_open,
+	.read	= seq_read,
+	.llseek	= no_llseek,
+	.release = single_release,
+	.owner = THIS_MODULE,
+};
+
+static int b53_vta_show(struct seq_file *s, void *p)
+{
+	struct dsa_switch *ds = s->private;
+	struct b53_device *dev = ds->priv;
+	struct b53_vlan vl;
+	unsigned int vid, port;
+
+	seq_puts(s, " VID type\n");
+	for (port = 0; port < ds->num_ports; port++) {
+		if ((BIT(port) & ds->enabled_port_mask) ||
+		    dsa_is_cpu_port(ds, port))
+			seq_printf(s, " %2d", port);
+	}
+	seq_puts(s, "\n");
+
+	mutex_lock(&dev->dbg_mutex);
+
+	for (vid = 0; vid < dev->num_vlans; vid++) {
+		b53_get_vlan_entry(dev, vid, &vl);
+		cond_resched();
+
+		if (!vl.valid)
+			continue;
+
+		seq_printf(s, " %4d", vid);
+		for (port = 0; port < ds->num_ports; port++) {
+			if ((BIT(port) & ds->enabled_port_mask) ||
+			    dsa_is_cpu_port(ds, port)) {
+				if (!(vl.members & BIT(port))) {
+					seq_puts(s, " x");
+					continue;
+				}
+
+				if (vl.untag & BIT(port))
+					seq_puts(s, " u");
+				else
+					seq_puts(s, " t");
+			}
+		}
+		seq_puts(s, "\n");
+	}
+
+	mutex_unlock(&dev->dbg_mutex);
+
+	return 0;
+}
+
+static int b53_vta_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, b53_vta_show, inode->i_private);
+}
+
+static const struct file_operations b53_vta_ops = {
+	.open	= b53_vta_open,
+	.read	= seq_read,
+	.llseek	= no_llseek,
+	.release = single_release,
+	.owner = THIS_MODULE,
+};
+
 static void b53_debugfs_init(struct dsa_switch *ds)
 {
 	struct b53_device *dev = ds->priv;
@@ -1663,6 +1766,10 @@ static void b53_debugfs_init(struct dsa_switch *ds)
 
 	debugfs_create_file("regs", S_IRUGO | S_IWUSR,
 			    dev->dbgfs, ds, &b53_regs_ops);
+	debugfs_create_file("fdb", S_IRUGO,
+			    dev->dbgfs, ds, &b53_fdb_ops);
+	debugfs_create_file("vta", S_IRUGO,
+			    dev->dbgfs, ds, &b53_vta_ops);
 }
 
 static const struct dsa_switch_ops b53_switch_ops = {
