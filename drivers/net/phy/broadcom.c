@@ -774,6 +774,9 @@ static struct phy_driver broadcom_drivers[] = {
 	.get_strings	= bcm_phy_get_strings,
 	.get_stats	= bcm53xx_phy_get_stats,
 	.probe		= bcm53xx_phy_probe,
+	.set_test	= genphy_set_test,
+	.get_test	= genphy_get_test,
+	.get_test_len   = genphy_get_test_len,
 } };
 
 module_phy_driver(broadcom_drivers);
