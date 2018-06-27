@@ -1280,6 +1280,22 @@ int b53_fdb_dump(struct dsa_switch *ds, int port,
 }
 EXPORT_SYMBOL(b53_fdb_dump);
 
+int b53_set_ageing_time(struct dsa_switch *ds, unsigned int ageing_time)
+{
+	struct b53_device *dev = ds->priv;
+	u32 val;
+
+	b53_read32(dev, B53_MGMT_PAGE, B53_AGING_TIME, &val);
+	val &= ~AGE_MAX_VAL;
+	if (!is5325(dev) && !is5365(dev))
+		val |= AGE_CHANGE;
+	val |= ageing_time / 1000;
+	b53_write32(dev, B53_MGMT_PAGE, B53_AGING_TIME, val);
+
+	return 0;
+}
+EXPORT_SYMBOL(b53_set_ageing_time);
+
 int b53_br_join(struct dsa_switch *ds, int port, struct net_device *br)
 {
 	struct b53_device *dev = ds->priv;
@@ -1783,6 +1799,7 @@ static const struct dsa_switch_ops b53_switch_ops = {
 	.adjust_link		= b53_adjust_link,
 	.port_enable		= b53_enable_port,
 	.port_disable		= b53_disable_port,
+	.set_ageing_time	= b53_set_ageing_time,
 	.port_bridge_join	= b53_br_join,
 	.port_bridge_leave	= b53_br_leave,
 	.port_stp_state_set	= b53_br_set_stp_state,
@@ -2103,6 +2120,9 @@ static int b53_switch_init(struct b53_device *dev)
 		if (ret)
 			return ret;
 	}
+
+	dev->ds->ageing_time_min = AGE_MIN_VAL;
+	dev->ds->ageing_time_max = AGE_MAX_VAL * 1000;
 
 	return 0;
 }
