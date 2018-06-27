@@ -386,6 +386,7 @@ static inline int b53_switch_get_reset_gpio(struct b53_device *dev)
 void b53_get_strings(struct dsa_switch *ds, int port, uint8_t *data);
 void b53_get_ethtool_stats(struct dsa_switch *ds, int port, uint64_t *data);
 int b53_get_sset_count(struct dsa_switch *ds);
+int b53_set_ageing_time(struct dsa_switch *ds, unsigned int ageing_time);
 int b53_br_join(struct dsa_switch *ds, int port, struct net_device *bridge);
 void b53_br_leave(struct dsa_switch *ds, int port, struct net_device *bridge);
 void b53_br_set_stp_state(struct dsa_switch *ds, int port, u8 state);
