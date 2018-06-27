@@ -1710,7 +1710,7 @@ static int b53_vta_show(struct seq_file *s, void *p)
 
 	mutex_lock(&dev->dbg_mutex);
 
-	for (vid = 0; vid < dev->num_vlans; vid++) {
+	for (vid = 0; vid < 32; vid++) {
 		b53_get_vlan_entry(dev, vid, &vl);
 		cond_resched();
 
