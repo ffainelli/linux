@@ -23,6 +23,8 @@
 #include <linux/mutex.h>
 #include <linux/phy.h>
 #include <linux/etherdevice.h>
+#include <linux/kthread.h>
+#include <linux/irq.h>
 #include <net/dsa.h>
 
 #include "b53_regs.h"
@@ -30,6 +32,7 @@
 struct b53_device;
 struct net_device;
 struct phylink_link_state;
+struct irq_domain;
 
 struct b53_io_ops {
 	int (*read8)(struct b53_device *dev, u8 page, u8 reg, u8 *value);
@@ -100,6 +103,12 @@ struct b53_vlan {
 	bool valid;
 };
 
+struct b53_irq {
+	u32 masked;
+	struct irq_chip chip;
+	struct irq_domain *domain;
+};
+
 struct b53_device {
 	struct dsa_switch *ds;
 	struct b53_platform_data *pdata;
@@ -119,6 +128,7 @@ struct b53_device {
 	int reset_gpio;
 	u8 num_arl_bins;
 	u16 num_arl_buckets;
+	u8 link_sts_offset;
 	enum dsa_tag_protocol tag_protocol;
 
 	/* used ports mask */
@@ -143,6 +153,11 @@ struct b53_device {
 	bool vlan_enabled;
 	unsigned int num_ports;
 	struct b53_port *ports;
+
+	int irq;
+	struct b53_irq irq_chip;
+	struct kthread_worker *kworker;
+	struct kthread_delayed_work irq_poll_work;
 };
 
 #define b53_for_each_port(dev, i) \
@@ -226,10 +241,7 @@ int b53_switch_detect(struct b53_device *dev);
 
 int b53_switch_register(struct b53_device *dev);
 
-static inline void b53_switch_remove(struct b53_device *dev)
-{
-	dsa_unregister_switch(dev->ds);
-}
+void b53_switch_remove(struct b53_device *dev);
 
 #define b53_build_op(type_op_size, val_type)				\
 static inline int b53_##type_op_size(struct b53_device *dev, u8 page,	\

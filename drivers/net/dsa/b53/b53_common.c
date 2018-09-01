@@ -29,6 +29,9 @@
 #include <linux/phylink.h>
 #include <linux/etherdevice.h>
 #include <linux/if_bridge.h>
+#include <linux/kthread.h>
+#include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <net/dsa.h>
 
 #include "b53_regs.h"
@@ -2137,6 +2140,274 @@ static int b53_get_max_mtu(struct dsa_switch *ds, int port)
 	return JMS_MAX_SIZE;
 }
 
+static irqreturn_t b53_irq_thread_work(struct b53_device *dev)
+{
+	unsigned int n, handled = 0;
+	u32 sts;
+
+	b53_read32(dev, B53_MIB_AC_PAGE, B53_INT_STS, &sts);
+	if (unlikely(sts == 0))
+		goto out;
+
+	do {
+		n = ffs(sts) - 1;
+		sts &= ~BIT(n);
+		handle_nested_irq(irq_find_mapping(dev->irq_chip.domain, n));
+		++handled;
+	} while (sts);
+out:
+	return handled ? IRQ_HANDLED : IRQ_NONE;
+}
+
+static irqreturn_t b53_irq_thread_fn(int irq, void *dev_id)
+{
+	return b53_irq_thread_work(dev_id);
+}
+
+static void b53_irq_poll(struct kthread_work *work)
+{
+	struct b53_device *dev = container_of(work, struct b53_device,
+					      irq_poll_work.work);
+	b53_irq_thread_work(dev);
+
+	kthread_queue_delayed_work(dev->kworker, &dev->irq_poll_work,
+				   msecs_to_jiffies(100));
+}
+
+static void b53_irq_mask(struct irq_data *d)
+{
+	struct b53_device *dev = irq_data_get_irq_chip_data(d);
+
+	dev->irq_chip.masked |= BIT(d->hwirq);
+}
+
+static void b53_irq_unmask(struct irq_data *d)
+{
+	struct b53_device *dev = irq_data_get_irq_chip_data(d);
+
+	dev->irq_chip.masked &= ~BIT(d->hwirq);
+}
+
+static void b53_irq_bus_lock(struct irq_data *d)
+{
+	struct b53_device *dev = irq_data_get_irq_chip_data(d);
+
+	mutex_lock(&dev->reg_mutex);
+}
+
+static void b53_irq_bus_sync_unlock(struct irq_data *d)
+{
+	struct b53_device *dev = irq_data_get_irq_chip_data(d);
+	u32 mask = GENMASK(dev->num_ports, 0);
+	u32 int_en;
+
+	if (is5325(dev) || is5365(dev) || is539x(dev))
+		goto out;
+
+	/* Use an unlocked operation */
+	dev->ops->read32(dev, B53_MIB_AC_PAGE, B53_INT_EN, &int_en);
+
+	int_en &= ~mask;
+	int_en |= ~dev->irq_chip.masked & mask;
+
+	dev->ops->write32(dev, B53_MIB_AC_PAGE, B53_INT_EN, int_en);
+out:
+	mutex_unlock(&dev->reg_mutex);
+}
+
+static const struct irq_chip b53_irq_chip = {
+	.name			= "b53-irq",
+	.irq_mask		= b53_irq_mask,
+	.irq_unmask		= b53_irq_unmask,
+	.irq_bus_lock		= b53_irq_bus_lock,
+	.irq_bus_sync_unlock	= b53_irq_bus_sync_unlock,
+};
+
+static int b53_irq_domain_map(struct irq_domain *d,
+			      unsigned int irq,
+			      irq_hw_number_t hwirq)
+{
+	struct b53_device *dev = d->host_data;
+
+	irq_set_chip_data(irq, d->host_data);
+	irq_set_chip_and_handler(irq, &dev->irq_chip.chip, handle_level_irq);
+	irq_set_noprobe(irq);
+
+	return 0;
+}
+
+static int b53_irq_domain_xlate(struct irq_domain *d, struct device_node *dn,
+				const u32 *intspec, unsigned int intsize,
+				unsigned long *out_hwirq,
+				unsigned int *out_type)
+{
+	struct b53_device *dev = d->host_data;
+
+	if (WARN_ON(intsize < 1))
+		return -EINVAL;
+
+	/* These chips do not have a real interrupt controller so instead
+	 * we can 1:1 map the interrupt that is per-port/PHY to the
+	 * LNKSTS register.
+	 */
+	if (is5325(dev) || is5365(dev) || is539x(dev)) {
+		*out_hwirq = intspec[0];
+		return 0;
+	}
+
+	/* These chips do have a real interrupt controller but we still want
+	 * to remap the per-port interrupts to be offset by the link change
+	 * interrupt shift to facilitate lookups using LNKSTS register which
+	 * maps ports from bit 0 -> bit 9.
+	 */
+	if (intspec[0] > dev->num_ports)
+		return -EINVAL;
+
+	*out_hwirq = intspec[0] + LNK_STS_INT_CHANGE_SHIFT;
+
+	return 0;
+}
+
+static const struct irq_domain_ops b53_irq_domain_ops = {
+	.map	= b53_irq_domain_map,
+	.xlate	= b53_irq_domain_xlate,
+};
+
+static int b53_irq_setup_common(struct b53_device *dev)
+{
+	unsigned int irq_offs = dev->link_sts_offset;
+	int irq;
+
+	dev->irq_chip.domain = irq_domain_add_simple(dev->dev->of_node,
+						     dev->num_ports + irq_offs,
+						     0, &b53_irq_domain_ops,
+						     dev);
+	if (!dev->irq_chip.domain)
+		return -ENOMEM;
+
+	for (irq = irq_offs; irq < dev->num_ports + irq_offs; irq++)
+		irq_create_mapping(dev->irq_chip.domain, irq);
+
+	dev->irq_chip.chip = b53_irq_chip;
+	dev->irq_chip.masked = ~0;
+
+	return 0;
+}
+
+static void b53_irq_free_common(struct b53_device *dev)
+{
+	unsigned int irq_offs = dev->link_sts_offset;
+	u32 int_en, mask;
+	int port, virq;
+
+	mask = GENMASK(dev->num_ports, 0);
+	mask <<= irq_offs;
+
+	dev->ops->read32(dev, B53_MIB_AC_PAGE, B53_INT_EN, &int_en);
+	int_en &= ~mask;
+	dev->ops->write32(dev, B53_MIB_AC_PAGE, B53_INT_EN, int_en);
+
+	for (port = irq_offs; port < dev->num_ports + irq_offs; port++) {
+		virq = irq_find_mapping(dev->irq_chip.domain, port);
+		irq_dispose_mapping(virq);
+	}
+
+	irq_domain_remove(dev->irq_chip.domain);
+}
+
+static int b53_irq_poll_setup(struct b53_device *dev)
+{
+	int ret;
+
+	ret = b53_irq_setup_common(dev);
+	if (ret)
+		return ret;
+
+	kthread_init_delayed_work(&dev->irq_poll_work, b53_irq_poll);
+
+	dev->kworker = kthread_create_worker(0, dev_name(dev->dev));
+	if (IS_ERR(dev->kworker))
+		return PTR_ERR(dev->kworker);
+
+	kthread_queue_delayed_work(dev->kworker, &dev->irq_poll_work,
+				   msecs_to_jiffies(100));
+
+	return 0;
+}
+
+static void b53_irq_poll_free(struct b53_device *dev)
+{
+	kthread_cancel_delayed_work_sync(&dev->irq_poll_work);
+	kthread_destroy_worker(dev->kworker);
+
+	mutex_lock(&dev->reg_mutex);
+	b53_irq_free_common(dev);
+	mutex_unlock(&dev->reg_mutex);
+}
+
+static int b53_irq_setup(struct b53_device *dev)
+{
+	int ret;
+
+	if (dev->irq <= 0)
+		return -ENXIO;
+
+	ret = b53_irq_setup_common(dev);
+	if (ret)
+		return ret;
+
+	ret = request_threaded_irq(dev->irq, NULL, b53_irq_thread_fn,
+				   IRQF_ONESHOT, dev_name(dev->dev), dev);
+	if (ret)
+		b53_irq_free_common(dev);
+
+	return ret;
+}
+
+static void b53_irq_free(struct b53_device *dev)
+{
+	if (dev->irq <= 0)
+		return;
+
+	free_irq(dev->irq, dev);
+
+	mutex_lock(&dev->reg_mutex);
+	b53_irq_free_common(dev);
+	mutex_unlock(&dev->reg_mutex);
+}
+
+static int b53_irq_init(struct b53_device *dev)
+{
+	bool polling = false;
+	int ret = 0;
+
+	/* 531x5 and 63xx support the interrupt controller with an external
+	 * interrupt towards the host. Newer chips have an interrupt controller
+	 * outside of the roboswitch (58xx, 7445, 7278 etc.).
+	 */
+	if ((is531x5(dev) || is63xx(dev))) {
+		ret = b53_irq_setup(dev);
+		/* Try polling */
+		if (ret < 0) {
+			polling = true;
+		}
+	}
+
+	/* Those chips do not support an external interrupt towards the host */
+	if (is5325(dev) || is5365(dev) || is539x(dev) || polling)
+		ret = b53_irq_poll_setup(dev);
+
+	return ret;
+}
+
+static void b53_irq_exit(struct b53_device *dev)
+{
+	if (is531x5(dev) || is63xx(dev))
+		b53_irq_free(dev);
+	if (is5325(dev) || is5365(dev) || is539x(dev) || dev->irq <= 0)
+		b53_irq_poll_free(dev);
+}
+
 static const struct dsa_switch_ops b53_switch_ops = {
 	.get_tag_protocol	= b53_get_tag_protocol,
 	.setup			= b53_setup,
@@ -2190,6 +2461,7 @@ struct b53_chip_data {
 	u8 duplex_reg;
 	u8 jumbo_pm_reg;
 	u8 jumbo_size_reg;
+	u8 link_sts_offset;
 };
 
 #define B53_VTA_REGS	\
@@ -2297,6 +2569,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM53128_DEVICE_ID,
@@ -2310,6 +2583,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM63XX_DEVICE_ID,
@@ -2336,6 +2610,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM53011_DEVICE_ID,
@@ -2349,6 +2624,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM53012_DEVICE_ID,
@@ -2362,6 +2638,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM53018_DEVICE_ID,
@@ -2375,6 +2652,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM53019_DEVICE_ID,
@@ -2388,6 +2666,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM58XX_DEVICE_ID,
@@ -2401,6 +2680,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM583XX_DEVICE_ID,
@@ -2414,6 +2694,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM7445_DEVICE_ID,
@@ -2427,6 +2708,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 	{
 		.chip_id = BCM7278_DEVICE_ID,
@@ -2440,6 +2722,7 @@ static const struct b53_chip_data b53_switch_chips[] = {
 		.duplex_reg = B53_DUPLEX_STAT_GE,
 		.jumbo_pm_reg = B53_JUMBO_PORT_MASK,
 		.jumbo_size_reg = B53_JUMBO_MAX_SIZE,
+		.link_sts_offset = LNK_STS_INT_CHANGE_SHIFT,
 	},
 };
 
@@ -2464,6 +2747,7 @@ static int b53_switch_init(struct b53_device *dev)
 			dev->num_vlans = chip->vlans;
 			dev->num_arl_bins = chip->arl_bins;
 			dev->num_arl_buckets = chip->arl_buckets;
+			dev->link_sts_offset = chip->link_sts_offset;
 			break;
 		}
 	}
@@ -2642,6 +2926,7 @@ int b53_switch_register(struct b53_device *dev)
 	if (dev->pdata) {
 		dev->chip_id = dev->pdata->chip_id;
 		dev->enabled_ports = dev->pdata->enabled_ports;
+		dev->irq = dev->pdata->irq;
 	}
 
 	if (!dev->chip_id && b53_switch_detect(dev))
@@ -2653,9 +2938,24 @@ int b53_switch_register(struct b53_device *dev)
 
 	pr_info("found switch: %s, rev %i\n", dev->name, dev->core_rev);
 
-	return dsa_register_switch(dev->ds);
+	ret = b53_irq_init(dev);
+	if (ret)
+		return ret;
+
+	ret = dsa_register_switch(dev->ds);
+	if (ret)
+		b53_irq_exit(dev);
+
+	return ret;
 }
 EXPORT_SYMBOL(b53_switch_register);
+
+void b53_switch_remove(struct b53_device *dev)
+{
+	dsa_unregister_switch(dev->ds);
+	b53_irq_exit(dev);
+}
+EXPORT_SYMBOL(b53_switch_remove);
 
 MODULE_AUTHOR("Jonas Gorski <jogo@openwrt.org>");
 MODULE_DESCRIPTION("B53 switch library");

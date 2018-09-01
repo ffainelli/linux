@@ -32,6 +32,7 @@ struct b53_platform_data {
 	/* only used by MMAP'd driver */
 	unsigned big_endian:1;
 	void __iomem *regs;
+	int irq;
 };
 
 #endif

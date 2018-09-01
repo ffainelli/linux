@@ -260,6 +260,18 @@
 #define B53_BRCM_HDR_TX_DIS		0x62
 
 /*************************************************************************
+ * Interrupt Controller Page Registers
+ *************************************************************************/
+
+/* Interrupt status register (32 bit) */
+#define B53_INT_STS			0x00
+#define  IMP_SLEEP_TIMER_RUN_MASK	0x3
+#define  LNK_STS_INT_CHANGE_SHIFT	16
+
+/* Interrupt enable register (32 bit) */
+#define B53_INT_EN			0x08
+
+/*************************************************************************
  * ARL Access Page Registers
  *************************************************************************/
 
