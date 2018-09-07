@@ -407,6 +407,8 @@ struct dsa_switch_ops {
 	int	(*setup)(struct dsa_switch *ds);
 	void	(*teardown)(struct dsa_switch *ds);
 	u32	(*get_phy_flags)(struct dsa_switch *ds, int port);
+	int	(*mii_bus_setup)(struct dsa_switch *ds);
+	void	(*mii_bus_teardown)(struct dsa_switch *ds);
 
 	/*
 	 * Access to the switch's PHY registers.

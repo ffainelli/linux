@@ -422,7 +422,9 @@ static int dsa_switch_setup(struct dsa_switch *ds)
 			goto unregister_notifier;
 		}
 
-		dsa_slave_mii_bus_init(ds);
+		err = dsa_slave_mii_bus_init(ds);
+		if (err < 0)
+			return err;
 
 		err = mdiobus_register(ds->slave_mii_bus);
 		if (err < 0)
@@ -449,8 +451,7 @@ static void dsa_switch_teardown(struct dsa_switch *ds)
 	if (!ds->setup)
 		return;
 
-	if (ds->slave_mii_bus && ds->ops->phy_read)
-		mdiobus_unregister(ds->slave_mii_bus);
+	dsa_slave_mii_bus_exit(ds);
 
 	dsa_switch_unregister_notifier(ds);
 

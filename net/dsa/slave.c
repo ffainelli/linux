@@ -43,8 +43,10 @@ static int dsa_slave_phy_write(struct mii_bus *bus, int addr, int reg, u16 val)
 	return 0;
 }
 
-void dsa_slave_mii_bus_init(struct dsa_switch *ds)
+int dsa_slave_mii_bus_init(struct dsa_switch *ds)
 {
+	int ret = 0;
+
 	ds->slave_mii_bus->priv = (void *)ds;
 	ds->slave_mii_bus->name = "dsa slave smi";
 	ds->slave_mii_bus->read = dsa_slave_phy_read;
@@ -53,6 +55,18 @@ void dsa_slave_mii_bus_init(struct dsa_switch *ds)
 		 ds->dst->index, ds->index);
 	ds->slave_mii_bus->parent = ds->dev;
 	ds->slave_mii_bus->phy_mask = ~ds->phys_mii_mask;
+	if (ds->ops->mii_bus_setup)
+		ret = ds->ops->mii_bus_setup(ds);
+	return ret;
+}
+
+void dsa_slave_mii_bus_exit(struct dsa_switch *ds)
+{
+	if (ds->slave_mii_bus && ds->ops->phy_read) {
+		if (ds->ops->mii_bus_teardown)
+			ds->ops->mii_bus_teardown(ds);
+		mdiobus_unregister(ds->slave_mii_bus);
+	}
 }
 
 

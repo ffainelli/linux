@@ -172,7 +172,8 @@ extern const struct phylink_mac_ops dsa_port_phylink_mac_ops;
 
 /* slave.c */
 extern const struct dsa_device_ops notag_netdev_ops;
-void dsa_slave_mii_bus_init(struct dsa_switch *ds);
+int dsa_slave_mii_bus_init(struct dsa_switch *ds);
+void dsa_slave_mii_bus_exit(struct dsa_switch *ds);
 int dsa_slave_create(struct dsa_port *dp);
 void dsa_slave_destroy(struct net_device *slave_dev);
 bool dsa_slave_dev_check(const struct net_device *dev);
