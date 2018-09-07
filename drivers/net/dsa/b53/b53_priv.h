@@ -107,6 +107,7 @@ struct b53_irq {
 	u32 masked;
 	struct irq_chip chip;
 	struct irq_domain *domain;
+	bool in_use;
 };
 
 struct b53_device {

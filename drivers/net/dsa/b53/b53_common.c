@@ -794,6 +794,52 @@ static int b53_switch_reset(struct b53_device *dev)
 	return b53_flush_arl(dev, FAST_AGE_STATIC);
 }
 
+static int b53_mii_bus_setup(struct dsa_switch *ds)
+{
+	struct mii_bus *bus = ds->slave_mii_bus;
+	struct b53_device *dev = ds->priv;
+	unsigned int port, err_port;
+	int irq, ret;
+
+	if (!dev->irq_chip.in_use)
+		return 0;
+
+	/* Assign the proper interrupt for each built-in PHY */
+	for (port = 0; port < dev->num_ports; port++) {
+		if (dsa_is_cpu_port(ds, port) || dsa_is_unused_port(ds, port))
+			continue;
+
+		irq = irq_find_mapping(dev->irq_chip.domain, port);
+		if (irq < 0) {
+			ret = irq;
+			goto out;
+		}
+		bus->irq[port] = irq;
+	}
+
+	return 0;
+
+out:
+	err_port = port;
+	for (port = 0; port < err_port; port++)
+		irq_dispose_mapping(bus->irq[port]);
+	return ret;
+}
+
+static void b53_mii_bus_teardown(struct dsa_switch *ds)
+{
+	struct mii_bus *bus = ds->slave_mii_bus;
+	struct b53_device *dev = ds->priv;
+	unsigned int port;
+
+	for (port = 0; port < dev->num_ports; port++) {
+		if (dsa_is_unused_port(ds, port) || dsa_is_cpu_port(ds, port))
+			continue;
+
+		irq_dispose_mapping(bus->irq[port]);
+	}
+}
+
 static int b53_phy_read16(struct dsa_switch *ds, int addr, int reg)
 {
 	struct b53_device *priv = ds->priv;
@@ -2394,8 +2440,11 @@ static int b53_irq_init(struct b53_device *dev)
 	}
 
 	/* Those chips do not support an external interrupt towards the host */
-	if (is5325(dev) || is5365(dev) || is539x(dev) || polling)
+	if (is5325(dev) || is5365(dev) || is539x(dev) || polling) {
 		ret = b53_irq_poll_setup(dev);
+		if (!ret)
+			dev->irq_chip.in_use = true;
+	}
 
 	return ret;
 }
@@ -2406,6 +2455,8 @@ static void b53_irq_exit(struct b53_device *dev)
 		b53_irq_free(dev);
 	if (is5325(dev) || is5365(dev) || is539x(dev) || dev->irq <= 0)
 		b53_irq_poll_free(dev);
+
+	dev->irq_chip.in_use = false;
 }
 
 static const struct dsa_switch_ops b53_switch_ops = {
@@ -2415,6 +2466,8 @@ static const struct dsa_switch_ops b53_switch_ops = {
 	.get_ethtool_stats	= b53_get_ethtool_stats,
 	.get_sset_count		= b53_get_sset_count,
 	.get_ethtool_phy_stats	= b53_get_ethtool_phy_stats,
+	.mii_bus_setup		= b53_mii_bus_setup,
+	.mii_bus_teardown	= b53_mii_bus_teardown,
 	.phy_read		= b53_phy_read16,
 	.phy_write		= b53_phy_write16,
 	.adjust_link		= b53_adjust_link,
