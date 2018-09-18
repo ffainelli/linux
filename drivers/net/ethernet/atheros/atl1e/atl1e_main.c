@@ -1525,9 +1525,8 @@ static int atl1e_clean(struct napi_struct *napi, int budget)
 	atl1e_clean_rx_irq(adapter, 0, &work_done, budget);
 
 	/* If no Tx and not enough Rx work done, exit the polling mode */
-	if (work_done < budget) {
+	if (work_done < budget && napi_complete_done(napi, work_done)) {
 quit_polling:
-		napi_complete_done(napi, work_done);
 		imr_data = AT_READ_REG(&adapter->hw, REG_IMR);
 		AT_WRITE_REG(&adapter->hw, REG_IMR, imr_data | ISR_RX_EVENT);
 		/* test debug */

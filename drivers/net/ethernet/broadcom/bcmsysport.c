@@ -1026,11 +1026,9 @@ static int bcm_sysport_poll(struct napi_struct *napi, int budget)
 	else
 		rdma_writel(priv, priv->rx_c_index << 16, RDMA_CONS_INDEX);
 
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done))
 		/* re-enable RX interrupts */
 		intrl2_0_mask_clear(priv, INTRL2_0_RDMA_MBDONE);
-	}
 
 	if (priv->dim.use_dim) {
 		net_dim_sample(priv->dim.event_ctr, priv->dim.packets,

@@ -1252,10 +1252,8 @@ static int pxa168_rx_poll(struct napi_struct *napi, int budget)
 		netif_wake_queue(dev);
 	}
 	work_done = rxq_process(dev, budget);
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done))
 		wrl(pep, INT_MASK, ALL_INTS);
-	}
 
 	return work_done;
 }

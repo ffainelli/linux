@@ -2314,8 +2314,8 @@ static int mv643xx_eth_poll(struct napi_struct *napi, int budget)
 	if (work_done < budget) {
 		if (mp->oom)
 			mod_timer(&mp->rx_oom, jiffies + (HZ / 10));
-		napi_complete_done(napi, work_done);
-		wrlp(mp, INT_MASK, mp->int_mask);
+		if (napi_complete_done(napi, work_done))
+			wrlp(mp, INT_MASK, mp->int_mask);
 	}
 
 	return work_done;

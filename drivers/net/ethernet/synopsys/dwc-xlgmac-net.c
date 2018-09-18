@@ -1293,13 +1293,9 @@ static int xlgmac_one_poll(struct napi_struct *napi, int budget)
 	processed = xlgmac_rx_poll(channel, budget);
 
 	/* If we processed everything, we are done */
-	if (processed < budget) {
-		/* Turn off polling */
-		napi_complete_done(napi, processed);
-
+	if (processed < budget && napi_complete_done(napi, processed))
 		/* Enable Tx and Rx interrupts */
 		enable_irq(channel->dma_irq);
-	}
 
 	XLGMAC_PR("received = %d\n", processed);
 
@@ -1336,13 +1332,9 @@ static int xlgmac_all_poll(struct napi_struct *napi, int budget)
 	} while ((processed < budget) && (processed != last_processed));
 
 	/* If we processed everything, we are done */
-	if (processed < budget) {
-		/* Turn off polling */
-		napi_complete_done(napi, processed);
-
+	if (processed < budget && napi_complete_done(napi, processed))
 		/* Enable Tx and Rx interrupts */
 		xlgmac_enable_rx_tx_ints(pdata);
-	}
 
 	XLGMAC_PR("received = %d\n", processed);
 

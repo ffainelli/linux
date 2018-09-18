@@ -1892,9 +1892,8 @@ static int atl1c_clean(struct napi_struct *napi, int budget)
 	/* just enable one RXQ */
 	atl1c_clean_rx_irq(adapter, &work_done, budget);
 
-	if (work_done < budget) {
+	if (work_done < budget & napi_complete_done(napi, work_done)) {
 quit_polling:
-		napi_complete_done(napi, work_done);
 		adapter->hw.intr_mask |= ISR_RX_PKT;
 		AT_WRITE_REG(&adapter->hw, REG_IMR, adapter->hw.intr_mask);
 	}

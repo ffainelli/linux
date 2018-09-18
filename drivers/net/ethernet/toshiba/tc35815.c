@@ -1637,11 +1637,9 @@ static int tc35815_poll(struct napi_struct *napi, int budget)
 	} while (status);
 	spin_unlock(&lp->rx_lock);
 
-	if (received < budget) {
-		napi_complete_done(napi, received);
+	if (received < budget && napi_complete_done(napi, received))
 		/* enable interrupts */
 		tc_writel(tc_readl(&tr->DMA_Ctl) & ~DMA_IntMask, &tr->DMA_Ctl);
-	}
 	return received;
 }
 

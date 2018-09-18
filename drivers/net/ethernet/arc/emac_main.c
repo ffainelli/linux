@@ -333,10 +333,8 @@ static int arc_emac_poll(struct napi_struct *napi, int budget)
 	arc_emac_rx_miss_handle(ndev);
 
 	work_done = arc_emac_rx(ndev, budget);
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done))
 		arc_reg_or(priv, R_ENABLE, RXINT_MASK | TXINT_MASK);
-	}
 
 	arc_emac_rx_stall_check(ndev, budget, work_done);
 

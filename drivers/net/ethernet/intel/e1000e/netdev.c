@@ -2673,10 +2673,9 @@ static int e1000e_poll(struct napi_struct *napi, int weight)
 		work_done = weight;
 
 	/* If weight not fully consumed, exit the polling mode */
-	if (work_done < weight) {
+	if (work_done < weight && napi_complete_done(napi, work_done)) {
 		if (adapter->itr_setting & 3)
 			e1000_set_itr(adapter);
-		napi_complete_done(napi, work_done);
 		if (!test_bit(__E1000_DOWN, &adapter->state)) {
 			if (adapter->msix_entries)
 				ew32(IMS, adapter->rx_ring->ims_val);

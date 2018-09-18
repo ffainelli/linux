@@ -6563,8 +6563,7 @@ static int rtl8169_poll(struct napi_struct *napi, int budget)
 		rtl_schedule_task(tp, RTL_FLAG_TASK_SLOW_PENDING);
 	}
 
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done)) {
 
 		rtl_irq_enable(tp, enable_mask);
 		mmiowb();

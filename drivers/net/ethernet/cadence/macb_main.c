@@ -1243,15 +1243,13 @@ static int macb_poll(struct napi_struct *napi, int budget)
 
 	work_done = bp->macbgem_ops.mog_rx(queue, budget);
 	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
-
 		/* Packets received while interrupts were disabled */
 		status = macb_readl(bp, RSR);
 		if (status) {
 			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
 				queue_writel(queue, ISR, MACB_BIT(RCOMP));
 			napi_reschedule(napi);
-		} else {
+		} else if (napi_complete_done(napi, work_done)) {
 			queue_writel(queue, IER, MACB_RX_INT_FLAGS);
 		}
 	}

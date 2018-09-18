@@ -2768,8 +2768,8 @@ static int s2io_poll_msix(struct napi_struct *napi, int budget)
 	pkts_processed = rx_intr_handler(ring, budget);
 	s2io_chk_rx_buffers(nic, ring);
 
-	if (pkts_processed < budget_org) {
-		napi_complete_done(napi, pkts_processed);
+	if (pkts_processed < budget_org &&
+	    napi_complete_done(napi, pkts_processed)) {
 		/*Re Enable MSI-Rx Vector*/
 		addr = (u8 __iomem *)&bar0->xmsi_mask_reg;
 		addr += 7 - ring->ring_no;
@@ -2802,8 +2802,8 @@ static int s2io_poll_inta(struct napi_struct *napi, int budget)
 		if (budget <= 0)
 			break;
 	}
-	if (pkts_processed < budget_org) {
-		napi_complete_done(napi, pkts_processed);
+	if (pkts_processed < budget_org &&
+	    napi_complete_done(napi, pkts_processed)) {
 		/* Re enable the Rx interrupts for the ring */
 		writeq(0, &bar0->rx_traffic_mask);
 		readl(&bar0->rx_traffic_mask);

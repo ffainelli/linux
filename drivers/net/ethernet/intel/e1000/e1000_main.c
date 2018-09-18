@@ -3810,10 +3810,9 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		work_done = budget;
 
 	/* If budget not fully consumed, exit the polling mode */
-	if (work_done < budget) {
+	if (work_done < budget && napi_complete_done(napi, work_done)) {
 		if (likely(adapter->itr_setting & 3))
 			e1000_set_itr(adapter);
-		napi_complete_done(napi, work_done);
 		if (!test_bit(__E1000_DOWN, &adapter->flags))
 			e1000_irq_enable(adapter);
 	}

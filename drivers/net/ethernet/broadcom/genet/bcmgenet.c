@@ -1903,10 +1903,8 @@ static int bcmgenet_rx_poll(struct napi_struct *napi, int budget)
 
 	work_done = bcmgenet_desc_rx(ring, budget);
 
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done))
 		ring->int_enable(ring);
-	}
 
 	if (ring->dim.use_dim) {
 		net_dim_sample(ring->dim.event_ctr, ring->dim.packets,

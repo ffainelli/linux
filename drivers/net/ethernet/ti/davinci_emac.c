@@ -1294,8 +1294,8 @@ static int emac_poll(struct napi_struct *napi, int budget)
 				dev_err(emac_dev, "RX Host error %s on ch=%d\n",
 					&emac_rxhost_errcodes[cause][0], ch);
 		}
-	} else if (num_rx_pkts < budget) {
-		napi_complete_done(napi, num_rx_pkts);
+	} else if (num_rx_pkts < budget &&
+		   napi_complete_done(napi, num_rx_pkts)) {
 		emac_int_enable(priv);
 	}
 

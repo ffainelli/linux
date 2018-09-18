@@ -2323,10 +2323,8 @@ static int pch_gbe_napi_poll(struct napi_struct *napi, int budget)
 	if (work_done < budget)
 		poll_end_flag = true;
 
-	if (poll_end_flag) {
-		napi_complete_done(napi, work_done);
+	if (poll_end_flag && napi_complete_done(napi, work_done))
 		pch_gbe_irq_enable(adapter);
-	}
 
 	if (adapter->rx_stop_flag) {
 		adapter->rx_stop_flag = false;

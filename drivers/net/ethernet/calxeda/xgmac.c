@@ -1247,10 +1247,8 @@ static int xgmac_poll(struct napi_struct *napi, int budget)
 	xgmac_tx_complete(priv);
 	work_done = xgmac_rx(priv, budget);
 
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done))
 		__raw_writel(DMA_INTR_DEFAULT_MASK, priv->base + XGMAC_DMA_INTR_ENA);
-	}
 	return work_done;
 }
 

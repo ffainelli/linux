@@ -860,8 +860,7 @@ static int rhine_napipoll(struct napi_struct *napi, int budget)
 		schedule_work(&rp->slow_event_task);
 	}
 
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done)) {
 		iowrite16(enable_mask, ioaddr + IntrEnable);
 		mmiowb();
 	}

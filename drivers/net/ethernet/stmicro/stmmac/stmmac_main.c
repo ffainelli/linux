@@ -3534,10 +3534,8 @@ static int stmmac_poll(struct napi_struct *napi, int budget)
 		stmmac_tx_clean(priv, queue);
 
 	work_done = stmmac_rx(priv, budget, rx_q->queue_index);
-	if (work_done < budget) {
-		napi_complete_done(napi, work_done);
+	if (work_done < budget && napi_complete_done(napi, work_done))
 		stmmac_enable_dma_irq(priv, priv->ioaddr, chan);
-	}
 	return work_done;
 }
 

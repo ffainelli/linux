@@ -1039,10 +1039,8 @@ static int cpsw_rx_mq_poll(struct napi_struct *napi_rx, int budget)
 			break;
 	}
 
-	if (num_rx < budget) {
-		napi_complete_done(napi_rx, num_rx);
+	if (num_rx < budget && napi_complete_done(napi_rx, num_rx))
 		writel(0xff, &cpsw->wr_regs->rx_en);
-	}
 
 	return num_rx;
 }
@@ -1053,8 +1051,7 @@ static int cpsw_rx_poll(struct napi_struct *napi_rx, int budget)
 	int num_rx;
 
 	num_rx = cpdma_chan_process(cpsw->rxv[0].ch, budget);
-	if (num_rx < budget) {
-		napi_complete_done(napi_rx, num_rx);
+	if (num_rx < budget && napi_complete_done(napi_rx, num_rx)) {
 		writel(0xff, &cpsw->wr_regs->rx_en);
 		if (cpsw->rx_irq_disabled) {
 			cpsw->rx_irq_disabled = false;
