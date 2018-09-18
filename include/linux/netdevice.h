@@ -466,7 +466,7 @@ static inline bool napi_reschedule(struct napi_struct *napi)
 	return false;
 }
 
-bool napi_complete_done(struct napi_struct *n, int work_done);
+bool __must_check napi_complete_done(struct napi_struct *n, int work_done);
 /**
  *	napi_complete - NAPI processing complete
  *	@n: NAPI context
