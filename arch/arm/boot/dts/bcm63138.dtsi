@@ -173,6 +173,52 @@
 				#phy-cells = <0>;
 			};
 		};
+
+		switch_top@80000 {
+			compatible = "brcm,bcm63138-switch-top-v2.0",
+				     "simple-bus";
+			ranges = <0x0 0x80000 0x40708>;
+
+			ethernet_switch: ethernet_switch@0 {
+				compatible = "brcm,bcm63138-switch-v4.0";
+				brcm,num-acb-queues = <64>;
+				brcm,num-gphy = <5>;
+				brcm,num-rgmii-ports = <3>;
+				brcm,fcb-pause-override;
+				reg = <0x0 0x40000>,
+				      <0x40000 0x120>,
+				      <0x40340 0x30>,
+				      <0x40380 0x30>,
+				      <0x40400 0x30>,
+				      <0x40600 0x108>;
+				reg-names = "core",
+					    "reg",
+					    "intrl2_0",
+					    "intrl2_1",
+					    "fcb",
+					    "acb";
+				interrupts = <GIC_SPI 90 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 91 IRQ_TYPE_LEVEL_HIGH>;
+				interrupt-names = "switch_0",
+						  "switch_1";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					/* Ports are defined in board DTS */
+				};
+			};
+
+			mdio: mdio@403c0 {
+				compatible = "brcm,bcm63138-mdio-v4.8",
+					     "brcm,unimac-mdio";
+				reg= <0x403c0 0x8>;
+				status = "disabled";
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+		};
 	};
 
 	/* Legacy UBUS base */
