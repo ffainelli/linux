@@ -49,3 +49,91 @@
 &sata_phy {
 	status = "okay";
 };
+
+&ethernet_switch {
+	status = "okay";
+
+	ports {
+		port0: port@0 {
+			phy-handle = <&int_phy0>;
+			phy-mode = "internal";
+			reg = <0>;
+		};
+
+		port1: port@1 {
+			phy_handle = <&int_phy1>;
+			phy-mode = "internal";
+			reg = <1>;
+		};
+
+		port2: port@2 {
+			phy-handle = <&int_phy2>;
+			phy-mode = "internal";
+			reg = <2>;
+		};
+
+		port3: port@3 {
+			phy-handle = <&int_phy3>;
+			phy-mode = "internal";
+			reg = <3>;
+		};
+
+		port4: port@4 {
+			phy-handle = <&int_phy4>;
+			phy-mode = "internal";
+			reg = <4>;
+		};
+
+		port8: port@8 {
+			ethernet = <&port8>;
+			label = "cpu";
+			reg = <8>;
+
+			fixed-link {
+				speed = <1000>;
+				full-duplex;
+			};
+		};
+	};
+};
+
+&mdio {
+	status = "okay";
+
+	ext_phy0: phy@0 {
+		reg = <0>;
+	};
+
+	ext_phy1: phy@1 {
+		reg = <1>;
+	};
+
+	int_phy0: phy@8 {
+		reg = <8>;
+	};
+
+	int_phy1: phy@9 {
+		reg = <9>;
+	};
+
+	int_phy2: phy@a {
+		reg = <10>;
+	};
+
+	int_phy3: phy@b {
+		reg = <11>;
+	};
+
+	int_phy4: phy@c {
+		reg = <12>;
+	};
+
+	ext_phy2: phy@18 {
+		reg = <24>;
+	};
+
+	ext_phy3: phy@19 {
+		reg = <25>;
+	};
+
+};
