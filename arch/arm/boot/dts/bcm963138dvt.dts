@@ -50,6 +50,19 @@
 	status = "okay";
 };
 
+&spi {
+	status = "okay";
+
+	flash: m25p80@0 {
+		compatible = "m25p80";
+		#size-cells = <2>;
+		#address-cells = <2>;
+		reg = <0>;
+		spi-max-frequency = <12500000>;
+		m25p,fast-read;
+	};
+};
+
 &ethernet_switch {
 	status = "okay";
 

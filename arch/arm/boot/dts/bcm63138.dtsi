@@ -52,6 +52,13 @@
 			clock-output-names = "periph";
 		};
 
+		hsspi_clk: hsspi_clk {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <200000000>;
+			clock-output-names = "hsspi";
+		};
+
 		/* peripheral clock for system timer */
 		axi_clk: axi_clk {
 			#clock-cells = <0>;
@@ -249,6 +256,17 @@
 			clocks = <&periph_clk>;
 			clock-names = "periph";
 			status = "disabled";
+		};
+
+		spi: spi@1000 {
+			compatible = "brcm,bcm6328-hsspi";
+			reg = <0x1000 0x600>;
+			interrupts = <GIC_SPI 37 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&hsspi_clk>;
+			clock-names = "hsspi";
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
 		};
 
 		nand: nand@2000 {
