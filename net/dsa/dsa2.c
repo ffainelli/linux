@@ -595,8 +595,11 @@ static int dsa_port_parse_of(struct dsa_port *dp, struct device_node *dn)
 		struct net_device *master;
 
 		master = of_find_net_device_by_node(ethernet);
-		if (!master)
-			return -EPROBE_DEFER;
+		if (!master) {
+			master = dev_get_by_name(&init_net, "lo");
+			if (!master)
+				return -EPROBE_DEFER;
+		}
 
 		return dsa_port_parse_cpu(dp, master);
 	}
