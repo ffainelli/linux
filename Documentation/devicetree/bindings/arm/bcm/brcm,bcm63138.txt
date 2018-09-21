@@ -1,12 +1,14 @@
-Broadcom BCM63138 DSL System-on-a-Chip device tree bindings
+Broadcom BCM63138/48 DSL System-on-a-Chip device tree bindings
 -----------------------------------------------------------
 
-Boards compatible with the BCM63138 DSL System-on-a-Chip should have the
-following properties:
+Boards compatible with the BCM63138 or BCM63148 DSL System-on-a-Chip should
+have the following properties:
 
 Required root node property:
 
-compatible: should be "brcm,bcm63138"
+compatible: should be one of:
+	    "brcm,bcm63138"
+	    "brcm,bcm63148"
 
 An optional Boot lookup table Device Tree node is required for secondary CPU
 initialization as well as a 'resets' phandle to the correct PMB controller as
@@ -18,13 +20,18 @@ Required properties for the Boot lookup table node:
 - reg: register base address and length for the Boot Lookup table
 
 Optional properties for the primary CPU node:
-- enable-method: should be "brcm,bcm63138"
+- enable-method: should be one of:
+		 "brcm,bcm63138" for BCM63138
+		 "brcm,brahma-b15" for BCM63148
+
 
 Optional properties for the secondary CPU node:
-- enable-method: should be "brcm,bcm63138"
+- enable-method: should be one of:
+		 "brcm,bcm63138" for BCM63138
+		 "brcm,brahma-b15" for BCM63148
 - resets: phandle to the relevant PMB controller, one integer indicating the internal
   bus number, and a second integer indicating the address of the CPU in the PMB
-  internal bus number.
+  internal bus number. This property is only required for BCM63138
 
 Example:
 
