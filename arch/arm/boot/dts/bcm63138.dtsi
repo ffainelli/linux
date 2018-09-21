@@ -6,6 +6,8 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 
+#include "bcm631x8-ubus.dtsi"
+
 / {
 	#address-cells = <1>;
 	#size-cells = <1>;
@@ -173,60 +175,6 @@
 				reg = <0>;
 				#phy-cells = <0>;
 			};
-		};
-	};
-
-	/* Legacy UBUS base */
-	ubus@fffe8000 {
-		compatible = "simple-bus";
-		#address-cells = <1>;
-		#size-cells = <1>;
-		ranges = <0 0xfffe8000 0x8100>;
-
-		timer: timer@80 {
-			compatible = "brcm,bcm6328-timer", "syscon";
-			reg = <0x80 0x3c>;
-		};
-
-		serial0: serial@600 {
-			compatible = "brcm,bcm6345-uart";
-			reg = <0x600 0x1b>;
-			interrupts = <GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&periph_clk>;
-			clock-names = "periph";
-			status = "disabled";
-		};
-
-		serial1: serial@620 {
-			compatible = "brcm,bcm6345-uart";
-			reg = <0x620 0x1b>;
-			interrupts = <GIC_SPI 33 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&periph_clk>;
-			clock-names = "periph";
-			status = "disabled";
-		};
-
-		nand: nand@2000 {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			compatible = "brcm,nand-bcm63138", "brcm,brcmnand-v7.0", "brcm,brcmnand";
-			reg = <0x2000 0x600>, <0xf0 0x10>;
-			reg-names = "nand", "nand-int-base";
-			status = "disabled";
-			interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;
-			interrupt-names = "nand";
-		};
-
-		bootlut: bootlut@8000 {
-			compatible = "brcm,bcm63138-bootlut";
-			reg = <0x8000 0x50>;
-		};
-
-		reboot {
-			compatible = "syscon-reboot";
-			regmap = <&timer>;
-			offset = <0x34>;
-			mask = <1>;
 		};
 	};
 };
