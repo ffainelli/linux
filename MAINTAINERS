@@ -3178,6 +3178,7 @@ L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 T:	git git://github.com/broadcom/stblinux.git
 S:	Maintained
 N:	bcm63xx
+F:	arch/arm/boot/dts/bcm*631*8*.dts*
 
 BROADCOM BCM63XX/BCM33XX UDC DRIVER
 M:	Kevin Cernekee <cernekee@gmail.com>

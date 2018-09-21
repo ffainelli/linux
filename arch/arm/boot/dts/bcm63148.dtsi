@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Broadcom BCM63148 DSL SoCs Device Tree
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+#include "bcm631x8-ubus.dtsi"
+
+/ {
+	compatible = "brcm,bcm63148";
+	model = "Broadcom BCM63148 DSL SoC";
+	interrupt-parent = <&gic>;
+
+	aliases {
+		uart0 = &serial0;
+		uart1 = &serial1;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "brcm,brahma-b15";
+			reg = <0>;
+			enable-method = "brcm,brahma-b15";
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "brcm,brahma-b15";
+			reg = <1>;
+			enable-method = "brcm,brahma-b15";
+		};
+	};
+
+	timer {
+		compatible = "arm,armv7-timer";
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(2) |
+					  IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(2) |
+					  IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(2) |
+					  IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(2) |
+					  IRQ_TYPE_LEVEL_LOW)>;
+	};
+
+	smpboot {
+		compatible = "brcm,brcmstb-smpboot";
+		syscon-cpu = <&cpu_biu_ctrl 0x88 0x178>;
+		syscon-cont = <&bootlut 0x20>;
+	};
+
+	clocks {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* UBUS peripheral clock */
+		periph_clk: periph_clk {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <50000000>;
+			clock-output-names = "periph";
+		};
+	};
+
+	/* ARM bus */
+	axi@80000000 {
+		compatible = "simple-bus";
+		ranges = <0 0x80000000 0x784000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		cpu_biu_ctrl: syscon@22000 {
+			compatible = "brcm,bcm63148-cpu-biu-ctrl",
+				     "brcm,brcmstb-cpu-biu-ctrl",
+				     "syscon";
+			reg = <0x22000 0x400>;
+		};
+
+		gic: interrupt-controller@31000 {
+			compatible = "brcm,brahma-b15-gic",
+				     "arm,cortex-a15-gic";
+			reg = <0x31000 0x1000>,
+			      <0x32000 0x2000>;
+			reg-names = "dist",
+				    "cpu";
+			interrupt-controller;
+			#interrupt-cells = <3>;
+		};
+	};
+};
