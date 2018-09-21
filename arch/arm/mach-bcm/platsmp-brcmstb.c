@@ -138,8 +138,13 @@ static void cpu_rst_cfg_set(u32 cpu, int set)
 static void cpu_set_boot_addr(u32 cpu, unsigned long boot_addr)
 {
 	const int reg_ofs = cpu_logical_map(cpu) * 8;
-	writel_relaxed(0, hif_cont_block + hif_cont_reg + reg_ofs);
-	writel_relaxed(boot_addr, hif_cont_block + hif_cont_reg + 4 + reg_ofs);
+
+	if (hif_cont_reg == 0) {
+		writel_relaxed(0, hif_cont_block + hif_cont_reg + reg_ofs);
+		writel_relaxed(boot_addr, hif_cont_block + hif_cont_reg + 4 + reg_ofs);
+	} else {
+		writel_relaxed(boot_addr, hif_cont_block + hif_cont_reg);
+	}
 }
 
 static void brcmstb_cpu_boot(u32 cpu)
@@ -312,7 +317,8 @@ static int __init setup_hifcont_regs(struct device_node *np)
 	}
 
 	/* Offset is at top of hif_cont_block */
-	hif_cont_reg = 0;
+	if (of_property_read_u32_index(np, name, 1, &hif_cont_reg))
+		hif_cont_reg = 0;
 
 cleanup:
 	of_node_put(syscon_np);
