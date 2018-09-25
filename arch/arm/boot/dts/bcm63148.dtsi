@@ -49,6 +49,11 @@
 					  IRQ_TYPE_LEVEL_LOW)>;
 	};
 
+	sram@ffe00000 {
+		compatible = "brcm,boot-sram", "mmio-sram";
+		reg = <0xffe00000 0x8000>;
+	};
+
 	smpboot {
 		compatible = "brcm,brcmstb-smpboot";
 		syscon-cpu = <&cpu_biu_ctrl 0x88 0x178>;
@@ -74,6 +79,35 @@
 		ranges = <0 0x80000000 0x784000>;
 		#address-cells = <1>;
 		#size-cells = <1>;
+
+		ahci: sata@8000 {
+			compatible = "brcm,bcm63138-ahci", "brcm,sata3-ahci";
+			reg-names = "ahci", "top-ctrl";
+			reg = <0xa000 0x9ac>, <0x8040 0x24>;
+			interrupts = <GIC_SPI 45 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+
+			sata0: sata-port@0 {
+				reg = <0>;
+				phys = <&sata_phy0>;
+			};
+		};
+
+		sata_phy: sata-phy@8100 {
+			compatible = "brcm,bcm63138-sata-phy", "brcm,phy-sata3";
+			reg = <0x8100 0x1e00>;
+			reg-names = "phy";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+
+			sata_phy0: sata-phy@0 {
+				reg = <0>;
+				#phy-cells = <0>;
+			};
+		};
 
 		cpu_biu_ctrl: syscon@22000 {
 			compatible = "brcm,bcm63148-cpu-biu-ctrl",
