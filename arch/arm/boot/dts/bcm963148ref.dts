@@ -41,3 +41,16 @@
 		brcm,nand-oob-sectors-size = <16>;
 	};
 };
+
+&spi {
+	status = "okay";
+
+	flash: flash@0 {
+		compatible = "m25p80";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		spi-max-frequency = <50000000>;
+		reg = <0>;
+		m25p-fast-read;
+	};
+};
