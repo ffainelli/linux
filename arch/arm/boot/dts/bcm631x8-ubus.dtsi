@@ -35,6 +35,15 @@
 			status = "disabled";
 		};
 
+		spi: spi@1000 {
+			compatible = "brcm,bcm6328-hsspi";
+			reg = <0x1000 0x600>;
+			interrupts = <GIC_SPI 37 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&periph_clk>;
+			clock-names = "hsspi";
+			status = "disabled";
+		};
+
 		nand: nand@2000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
