@@ -20,6 +20,11 @@
 		reg = <0x0 0x20000000>;
 	};
 
+	sfp {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c>;
+		//los-gpios = <&gpio 28 GPIO_ACTIVE_HIGH>;
+	};
 };
 
 &serial0 {
@@ -53,4 +58,8 @@
 		reg = <0>;
 		m25p-fast-read;
 	};
+};
+
+&i2c {
+	status = "okay";
 };
