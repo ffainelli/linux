@@ -61,6 +61,15 @@
 			reg = <0x8000 0x50>;
 		};
 
+		i2c: i2c@3e00 {
+			compatible = "brcm,brcmper-i2c";
+			reg = <0x3e00 0x58>;
+			interrupts= <GIC_SPI 83 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
 		reboot {
 			compatible = "syscon-reboot";
 			regmap = <&timer>;
