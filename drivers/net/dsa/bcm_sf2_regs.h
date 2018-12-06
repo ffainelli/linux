@@ -222,8 +222,13 @@ enum bcm_sf2_reg_offs {
 #define CORE_GMNCFGCFG			0x0800
 #define  RST_MIB_CNT			(1 << 0)
 #define  RXBPDU_EN			(1 << 1)
+#define  FRM_MGNP_SHIFT			6
+#define  FRM_MGNP_MASK			0x3
+#define  FRM_MNGP_IMP0			2
+#define  FRM_MGNP_IMP_DUAL		3
 
 #define CORE_IMP0_PRT_ID		0x0804
+#define CORE_IMP1_PRT_ID		0x0808
 
 #define CORE_RST_MIB_CNT_EN		0x0950
 
