@@ -364,8 +364,6 @@ static void b53_enable_vlan(struct b53_device *dev, bool enable,
 		b53_read8(dev, B53_VLAN_PAGE, B53_VLAN_CTRL5, &vc5);
 	}
 
-	mgmt &= ~SM_SW_FWD_MODE;
-
 	if (enable) {
 		vc0 |= VC0_VLAN_EN | VC0_VID_CHK_EN | VC0_VID_HASH_VID;
 		vc1 |= VC1_RX_MCST_UNTAG_EN | VC1_RX_MCST_FWD_EN;
@@ -489,6 +487,43 @@ static int b53_fast_age_vlan(struct b53_device *dev, u16 vid)
 
 	return b53_flush_arl(dev, FAST_AGE_VLAN);
 }
+
+void b53_port_learn_setup(struct dsa_switch *ds, int port)
+{
+	struct b53_device *dev = ds->priv;
+	u16 reg;
+
+	/* Enable learning */
+	b53_read16(dev, B53_CTRL_PAGE, B53_DIS_LEARN, &reg);
+	reg &= ~BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_DIS_LEARN, reg);
+
+	/* Software learning control disabled */
+	b53_read16(dev, B53_CTRL_PAGE, B53_SFT_LRN_CTRL, &reg);
+	reg &= ~BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_SFT_LRN_CTRL, reg);
+
+	/* Configure IP multicast, allow Unicast ARL misses to be forwarded */
+	b53_read16(dev, B53_CTRL_PAGE, B53_IP_MULTICAST_CTRL, &reg);
+	reg |= B53_IPMC_FWD_EN | B53_UC_FWD_EN;
+	b53_write16(dev, B53_CTRL_PAGE, B53_IP_MULTICAST_CTRL, reg);
+
+	/* Set port in Unicast lookup forward map */
+	b53_read16(dev, B53_CTRL_PAGE, B53_UC_FLOOD_MASK, &reg);
+	reg |= BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_UC_FLOOD_MASK, reg);
+
+	/* Do not set port in Multicast lookup forward map, learn */
+	b53_read16(dev, B53_CTRL_PAGE, B53_MC_FLOOD_MASK, &reg);
+	reg &= ~BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_MC_FLOOD_MASK, reg);
+
+	/* Do not set port in IP multicast lookup formward map, learn */
+	b53_read16(dev, B53_CTRL_PAGE, B53_IPMC_FLOOD_MASK, &reg);
+	reg &= ~BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_IPMC_FLOOD_MASK, reg);
+}
+EXPORT_SYMBOL(b53_port_learn_setup);
 
 void b53_imp_vlan_setup(struct dsa_switch *ds, int cpu_port)
 {

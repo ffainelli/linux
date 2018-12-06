@@ -51,19 +51,24 @@ static void bcm_sf2_imp_setup(struct dsa_switch *ds, int port)
 	reg &= ~P_TXQ_PSM_VDD(port);
 	core_writel(priv, reg, CORE_MEM_PSM_VDD_CTRL);
 
-	/* Enable Broadcast, Multicast, Unicast forwarding to IMP port */
-	reg = core_readl(priv, CORE_IMP_CTL);
-	reg |= (RX_BCST_EN | RX_MCST_EN | RX_UCST_EN);
-	reg &= ~(RX_DIS | TX_DIS);
-	core_writel(priv, reg, CORE_IMP_CTL);
+	/* Enable forwarding and managed mode */
+	core_writel(priv, SW_FWDG_EN | SW_FWDG_MODE, CORE_SWMODE);
 
-	/* Enable forwarding */
-	core_writel(priv, SW_FWDG_EN, CORE_SWMODE);
+	/* Configure port for learning */
+	b53_port_learn_setup(ds, port);
 
-	/* Enable IMP port in dumb mode */
+	/* Disable dumb forwarding mode for IMP port */
 	reg = core_readl(priv, CORE_SWITCH_CTRL);
-	reg |= MII_DUMB_FWDG_EN;
+	reg &= ~MII_DUMB_FWDG_EN;
 	core_writel(priv, reg, CORE_SWITCH_CTRL);
+
+	/* Enable IGMP and MLD high-level protocol snooping support */
+	reg = HL_PRTC_IGMP_RPTLVE_EN | HL_PRTC_IGMP_RPTVLE_FWD_MODE |
+	      HL_PRTC_IGMP_QRY_EN | HL_PRTC_IGMP_QRY_FWD_MODE |
+	      HL_PRTC_IGMP_UKN_EN | HL_PRTC_IGMP_UKN_FWD_MODE |
+	      HL_PRTC_MLD_RPTDONE_EN | HL_PRTC_MLD_RPTDONE_FWD_MODE |
+	      HL_PRTC_MLD_QRY_EN | HL_PRTC_MLD_QRY_FWD_MODE;
+	b53_write32(priv->dev, B53_MGMT_PAGE, B53_HL_PRTC_CTRL, reg);
 
 	/* Configure Traffic Class to QoS mapping, allow each priority to map
 	 * to a different queue number
@@ -75,10 +80,26 @@ static void bcm_sf2_imp_setup(struct dsa_switch *ds, int port)
 
 	b53_brcm_hdr_setup(ds, port);
 
+	/* Set IMP0 or IMP1 port to be managed port, enable BPDU */
+	reg = core_readl(priv, CORE_GMNCFGCFG);
+	reg &= ~(FRM_MGNP_MASK << FRM_MGNP_SHIFT);
+	if (port == core_readl(priv, CORE_IMP0_PRT_ID))
+		reg |= FRM_MNGP_IMP0 << FRM_MGNP_SHIFT;
+	if (port == core_readl(priv, CORE_IMP1_PRT_ID))
+		reg |= FRM_MGNP_IMP_DUAL << FRM_MGNP_SHIFT;
+	reg |= RXBPDU_EN;
+	core_writel(priv, reg, CORE_GMNCFGCFG);
+
 	/* Force link status for IMP port */
 	reg = core_readl(priv, offset);
 	reg |= (MII_SW_OR | LINK_STS);
 	core_writel(priv, reg, offset);
+
+	/* Enable Broadcast, Unicast forwarding to IMP port */
+	reg = core_readl(priv, CORE_IMP_CTL);
+	reg |= (RX_BCST_EN | RX_UCST_EN);
+	reg &= ~(RX_DIS | TX_DIS);
+	core_writel(priv, reg, CORE_IMP_CTL);
 }
 
 static void bcm_sf2_gphy_enable_set(struct dsa_switch *ds, bool enable)
@@ -166,10 +187,8 @@ static int bcm_sf2_port_setup(struct dsa_switch *ds, int port,
 	reg &= ~P_TXQ_PSM_VDD(port);
 	core_writel(priv, reg, CORE_MEM_PSM_VDD_CTRL);
 
-	/* Enable learning */
-	reg = core_readl(priv, CORE_DIS_LEARN);
-	reg &= ~BIT(port);
-	core_writel(priv, reg, CORE_DIS_LEARN);
+	/* Configure port for learning */
+	b53_port_learn_setup(ds, port);
 
 	/* Enable Broadcom tags for that port if requested */
 	if (priv->brcm_tag_mask & BIT(port))
@@ -682,6 +701,7 @@ static int bcm_sf2_sw_suspend(struct dsa_switch *ds)
 {
 	struct bcm_sf2_priv *priv = bcm_sf2_to_priv(ds);
 	unsigned int port;
+	u32 reg;
 
 	bcm_sf2_intr_disable(priv);
 
@@ -693,6 +713,20 @@ static int bcm_sf2_sw_suspend(struct dsa_switch *ds)
 		if (dsa_is_user_port(ds, port) || dsa_is_cpu_port(ds, port))
 			bcm_sf2_port_disable(ds, port);
 	}
+
+	/* Disable management mode since we won't be able to
+	 * perform any tasks while being suspended.
+	 */
+	reg = core_readl(priv, CORE_SWMODE);
+	reg &= ~SW_FWDG_MODE;
+	core_writel(priv, reg, CORE_SWMODE);
+
+	/* Enable IMP port in dumb switching mode to allow
+	 * Magic Packets to reach IMP port.
+	 */
+	reg = core_readl(priv, CORE_SWITCH_CTRL);
+	reg |= MII_DUMB_FWDG_EN;
+	core_writel(priv, reg, CORE_SWITCH_CTRL);
 
 	return 0;
 }
@@ -963,6 +997,11 @@ static const struct dsa_switch_ops bcm_sf2_ops = {
 	.set_rxnfc		= bcm_sf2_set_rxnfc,
 	.port_mirror_add	= b53_mirror_add,
 	.port_mirror_del	= b53_mirror_del,
+	.port_mc_disabled	= b53_mc_disabled,
+	.port_mdb_prepare	= b53_mdb_prepare,
+	.port_mdb_add		= b53_mdb_add,
+	.port_mdb_del		= b53_mdb_del,
+	.port_attr_get		= b53_port_attr_get,
 };
 
 struct bcm_sf2_of_data {
