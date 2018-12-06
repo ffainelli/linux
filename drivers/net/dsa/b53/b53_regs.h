@@ -115,6 +115,8 @@
 #define B53_UC_FLOOD_MASK		0x32
 #define B53_MC_FLOOD_MASK		0x34
 #define B53_IPMC_FLOOD_MASK		0x36
+#define B53_DIS_LEARN			0x3c
+#define B53_SFT_LRN_CTRL		0x3e
 
 /*
  * Override Ports 0-7 State on devices with xMII interfaces (8 bit)
@@ -252,6 +254,26 @@
 
 /* Revision ID register (8 bit) */
 #define B53_REV_ID			0x40
+
+/* High-level Protocol Control Register (32 bit) */
+#define B53_HL_PRTC_CTRL		0x50
+#define  HL_PRTC_ARP_EN			(1 << 0)
+#define  HL_PRTC_RARP_EN		(1 << 1)
+#define  HL_PRTC_DHCP_EN		(1 << 2)
+#define  HL_PRTC_ICMPV4_EN		(1 << 3)
+#define  HL_PRTC_ICMPV6_EN		(1 << 4)
+#define  HL_PRTC_ICMPV6_FWD_MODE	(1 << 5)
+#define  HL_PRTC_IGMP_DIP_EN		(1 << 8)
+#define  HL_PRTC_IGMP_RPTLVE_EN		(1 << 9)
+#define  HL_PRTC_IGMP_RPTVLE_FWD_MODE	(1 << 10)
+#define  HL_PRTC_IGMP_QRY_EN		(1 << 11)
+#define  HL_PRTC_IGMP_QRY_FWD_MODE	(1 << 12)
+#define  HL_PRTC_IGMP_UKN_EN		(1 << 13)
+#define  HL_PRTC_IGMP_UKN_FWD_MODE	(1 << 14)
+#define  HL_PRTC_MLD_RPTDONE_EN		(1 << 15)
+#define  HL_PRTC_MLD_RPTDONE_FWD_MODE	(1 << 16)
+#define  HL_PRTC_MLD_QRY_EN		(1 << 17)
+#define  HL_PRTC_MLD_QRY_FWD_MODE	(1 << 18)
 
 /* Broadcom header RX control (16 bit) */
 #define B53_BRCM_HDR_RX_DIS		0x60
