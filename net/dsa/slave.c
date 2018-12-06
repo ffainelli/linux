@@ -68,6 +68,39 @@ static int dsa_slave_get_iflink(const struct net_device *dev)
 	return dsa_slave_to_master(dev)->ifindex;
 }
 
+static int dsa_slave_sync_unsync_mdb_addr(struct net_device *dev,
+					  const unsigned char *addr, bool add)
+{
+	struct switchdev_obj_port_mdb mdb = {
+		.obj = {
+			.id = SWITCHDEV_OBJ_ID_HOST_MDB,
+			.flags = SWITCHDEV_F_DEFER,
+		},
+		.vid = 0,
+	};
+	int ret = -EOPNOTSUPP;
+
+	ether_addr_copy(mdb.addr, addr);
+	if (add)
+		ret = switchdev_port_obj_add(dev, &mdb.obj, NULL);
+	else
+		ret = switchdev_port_obj_del(dev, &mdb.obj);
+
+	return ret;
+}
+
+static int dsa_slave_sync_mdb_addr(struct net_device *dev,
+				   const unsigned char *addr)
+{
+	return dsa_slave_sync_unsync_mdb_addr(dev, addr, true);
+}
+
+static int dsa_slave_unsync_mdb_addr(struct net_device *dev,
+				     const unsigned char *addr)
+{
+	return dsa_slave_sync_unsync_mdb_addr(dev, addr, false);
+}
+
 static int dsa_slave_open(struct net_device *dev)
 {
 	struct net_device *master = dsa_slave_to_master(dev);
@@ -126,6 +159,8 @@ static int dsa_slave_close(struct net_device *dev)
 
 	dev_mc_unsync(master, dev);
 	dev_uc_unsync(master, dev);
+	__hw_addr_unsync_dev(&dev->mc, dev, dsa_slave_unsync_mdb_addr);
+
 	if (dev->flags & IFF_ALLMULTI)
 		dev_set_allmulti(master, -1);
 	if (dev->flags & IFF_PROMISC)
@@ -150,7 +185,17 @@ static void dsa_slave_change_rx_flags(struct net_device *dev, int change)
 static void dsa_slave_set_rx_mode(struct net_device *dev)
 {
 	struct net_device *master = dsa_slave_to_master(dev);
+	struct dsa_port *dp = dsa_slave_to_port(dev);
 
+	/* If the port is bridged, the bridge takes care of sending
+	 * SWITCHDEV_OBJ_ID_HOST_MDB to program the host's MC filter
+	 */
+	if (netdev_mc_empty(dev) || dp->bridge_dev)
+		goto out;
+
+	__hw_addr_sync_dev(&dev->mc, dev, dsa_slave_sync_mdb_addr,
+			   dsa_slave_unsync_mdb_addr);
+out:
 	dev_mc_sync(master, dev);
 	dev_uc_sync(master, dev);
 }
@@ -1396,6 +1441,11 @@ static int dsa_slave_changeupper(struct net_device *dev,
 
 	if (netif_is_bridge_master(info->upper_dev)) {
 		if (info->linking) {
+			/* Remove existing MC addresses that might have been
+			 * programmed
+			 */
+			__hw_addr_unsync_dev(&dev->mc, dev,
+					     dsa_slave_unsync_mdb_addr);
 			err = dsa_port_bridge_join(dp, info->upper_dev);
 			err = notifier_from_errno(err);
 		} else {
