@@ -1037,6 +1037,54 @@ static int dsa_slave_get_ts_info(struct net_device *dev,
 	return ds->ops->get_ts_info(ds, p->dp->index, ts);
 }
 
+static int dsa_slave_vlan_rx_add_vid(struct net_device *dev, __be16 proto,
+				     u16 vid)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct switchdev_obj_port_vlan vlan = { };
+	int ret = 0;
+
+	/* If the port is bridged and the bridge is VLAN aware, let the bridge
+	 * manage VLANs
+	 */
+	if (dp->bridge_dev && br_vlan_enabled(dp->bridge_dev))
+		return -EINVAL;
+
+	/* This API only allows programming tagged, non-PVID VIDs */
+	vlan.vid_begin = vid;
+	vlan.vid_end = vid;
+
+	ret = dsa_port_vlan_add(dp, &vlan, NULL);
+	if (ret == -EOPNOTSUPP)
+		ret = 0;
+
+	return ret;
+}
+
+static int dsa_slave_vlan_rx_kill_vid(struct net_device *dev, __be16 proto,
+				      u16 vid)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct switchdev_obj_port_vlan vlan = { };
+	int ret = 0;
+
+	/* If the port is bridged and the bridge is VLAN aware, let the bridge
+	 * manage VLANs
+	 */
+	if (dp->bridge_dev && br_vlan_enabled(dp->bridge_dev))
+		return -EINVAL;
+
+	/* This API only allows programming tagged, non-PVID VIDs */
+	vlan.vid_begin = vid;
+	vlan.vid_end = vid;
+
+	ret = dsa_port_vlan_del(dp, &vlan);
+	if (ret == -EOPNOTSUPP)
+		ret = 0;
+
+	return ret;
+}
+
 static const struct ethtool_ops dsa_slave_ethtool_ops = {
 	.get_drvinfo		= dsa_slave_get_drvinfo,
 	.get_regs_len		= dsa_slave_get_regs_len,
@@ -1102,6 +1150,8 @@ static const struct net_device_ops dsa_slave_netdev_ops = {
 	.ndo_setup_tc		= dsa_slave_setup_tc,
 	.ndo_get_stats64	= dsa_slave_get_stats64,
 	.ndo_get_port_parent_id	= dsa_slave_get_port_parent_id,
+	.ndo_vlan_rx_add_vid	= dsa_slave_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid	= dsa_slave_vlan_rx_kill_vid,
 };
 
 static const struct switchdev_ops dsa_slave_switchdev_ops = {
@@ -1362,7 +1412,8 @@ int dsa_slave_create(struct dsa_port *port)
 	if (slave_dev == NULL)
 		return -ENOMEM;
 
-	slave_dev->features = master->vlan_features | NETIF_F_HW_TC;
+	slave_dev->features = master->vlan_features | NETIF_F_HW_TC |
+				NETIF_F_HW_VLAN_CTAG_FILTER;
 	slave_dev->hw_features |= NETIF_F_HW_TC;
 	slave_dev->ethtool_ops = &dsa_slave_ethtool_ops;
 	eth_hw_addr_inherit(slave_dev, master);
