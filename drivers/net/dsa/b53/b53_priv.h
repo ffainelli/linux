@@ -350,6 +350,9 @@ int b53_fdb_del(struct dsa_switch *ds, int port,
 		const unsigned char *addr, u16 vid);
 int b53_fdb_dump(struct dsa_switch *ds, int port,
 		 dsa_fdb_dump_cb_t *cb, void *data);
+int b53_port_attr_get(struct dsa_switch *ds, int port,
+		      struct switchdev_attr *attr);
+int b53_mc_disabled(struct dsa_switch *ds, int port, bool mc_disabled);
 int b53_mdb_prepare(struct dsa_switch *ds, int port,
 		    const struct switchdev_obj_port_mdb *mdb);
 void b53_mdb_add(struct dsa_switch *ds, int port,

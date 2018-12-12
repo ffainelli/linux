@@ -1640,6 +1640,93 @@ int b53_fdb_dump(struct dsa_switch *ds, int port,
 }
 EXPORT_SYMBOL(b53_fdb_dump);
 
+int b53_port_attr_get(struct dsa_switch *ds, int port,
+		      struct switchdev_attr *attr)
+{
+	struct b53_device *dev = ds->priv;
+	struct net_device *bridge_dev;
+	const struct dsa_port *dp;
+	bool mc_disabled;
+	unsigned int i;
+
+	if (is5325(dev) || is5365(dev))
+		return -EOPNOTSUPP;
+
+	switch (attr->id) {
+	case SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS_SUPPORT:
+		attr->u.brport_flags_support = 0;
+		return 0;
+	case SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED_SUPPORT:
+		mc_disabled = attr->u.mc_disabled_support;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	/* Handle the case were multiple bridges span the same switch device
+	 * and one of them has a different setting than what is being requested
+	 * which would be breaking filtering semantics for any of the other
+	 * bridge devices. We must also take care of non-bridged ports which
+	 * expect multicast filtering to remain turned on.
+	 */
+	for (i = 0; i < ds->num_ports; i++) {
+		if (dsa_is_unused_port(ds, i) || dsa_is_cpu_port(ds, i))
+			continue;
+
+		if (i == port)
+			continue;
+
+		dp = dsa_to_port(ds, i);
+		bridge_dev = dp->bridge_dev;
+		if ((bridge_dev &&
+		     bridge_dev != dsa_to_port(ds, port)->bridge_dev &&
+		     br_multicast_enabled(bridge_dev) != !mc_disabled) ||
+		     (!bridge_dev && mc_disabled)) {
+			netdev_err(dp->slave,
+				   "MC filtering is global to the switch!\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(b53_port_attr_get);
+
+int b53_mc_disabled(struct dsa_switch *ds, int port, bool mc_disabled)
+{
+	unsigned int cpu_port = dsa_to_port(ds, port)->cpu_dp->index;
+	struct b53_device *dev = ds->priv;
+	u8 port_ctrl;
+	u16 mc_ctrl;
+
+	/* Allow CPU port to receive multicast traffic */
+	b53_read8(dev, B53_CTRL_PAGE, B53_PORT_CTRL(cpu_port), &port_ctrl);
+	if (mc_disabled)
+		port_ctrl |= PORT_CTRL_RX_MCST_EN;
+	else
+		port_ctrl &= ~PORT_CTRL_RX_MCST_EN;
+	b53_write8(dev, B53_CTRL_PAGE, B53_PORT_CTRL(cpu_port), port_ctrl);
+
+	/* Allow port to flood multicast */
+	b53_read16(dev, B53_CTRL_PAGE, B53_MC_FLOOD_MASK, &mc_ctrl);
+	if (mc_disabled)
+		mc_ctrl |= BIT(port);
+	else
+		mc_ctrl &= ~BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_MC_FLOOD_MASK, mc_ctrl);
+
+	/* And flood IP multicast as well */
+	b53_read16(dev, B53_CTRL_PAGE, B53_IPMC_FLOOD_MASK, &mc_ctrl);
+	if (mc_disabled)
+		mc_ctrl |= BIT(port);
+	else
+		mc_ctrl &= ~BIT(port);
+	b53_write16(dev, B53_CTRL_PAGE, B53_IPMC_FLOOD_MASK, mc_ctrl);
+
+	return 0;
+}
+EXPORT_SYMBOL(b53_mc_disabled);
+
 int b53_mdb_prepare(struct dsa_switch *ds, int port,
 		    const struct switchdev_obj_port_mdb *mdb)
 {
@@ -2025,6 +2112,7 @@ static const struct dsa_switch_ops b53_switch_ops = {
 	.port_mirror_add	= b53_mirror_add,
 	.port_mirror_del	= b53_mirror_del,
 	.port_mdb_prepare	= b53_mdb_prepare,
+	.port_mc_disabled	= b53_mc_disabled,
 	.port_mdb_add		= b53_mdb_add,
 	.port_mdb_del		= b53_mdb_del,
 };
