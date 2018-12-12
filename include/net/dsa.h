@@ -426,6 +426,8 @@ struct dsa_switch_ops {
 	/*
 	 * Multicast database
 	 */
+	int	(*port_mc_disabled)(struct dsa_switch *ds, int port,
+				    bool mc_disabled);
 	int (*port_mdb_prepare)(struct dsa_switch *ds, int port,
 				const struct switchdev_obj_port_mdb *mdb);
 	void (*port_mdb_add)(struct dsa_switch *ds, int port,
@@ -468,6 +470,12 @@ struct dsa_switch_ops {
 				 struct sk_buff *clone, unsigned int type);
 	bool	(*port_rxtstamp)(struct dsa_switch *ds, int port,
 				 struct sk_buff *skb, unsigned int type);
+
+	/*
+	 * SWITCHDEV integration
+	 */
+	int	(*port_attr_get)(struct dsa_switch *ds, int port,
+				 struct switchdev_attr *attr);
 };
 
 struct dsa_switch_driver {

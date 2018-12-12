@@ -349,6 +349,9 @@ static int dsa_slave_port_attr_set(struct net_device *dev,
 	case SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS:
 		ret = dsa_port_bridge_flags(dp, attr->u.brport_flags, trans);
 		break;
+	case SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED:
+		ret = dsa_port_mc_disabled(dp, attr->u.mc_disabled, trans);
+		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;
@@ -432,6 +435,29 @@ static int dsa_slave_get_port_parent_id(struct net_device *dev,
 	return 0;
 }
 
+<<<<<<< HEAD
+=======
+static int dsa_slave_port_attr_get(struct net_device *dev,
+				   struct switchdev_attr *attr)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct dsa_switch *ds = dp->ds;
+
+	if (ds->ops->port_attr_get)
+		return ds->ops->port_attr_get(ds, dp->index, attr);
+
+	switch (attr->id) {
+	case SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS_SUPPORT:
+		attr->u.brport_flags_support = 0;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
+>>>>>>> 1c492cd36b99... net: dsa: Wire up multicast IGMP snooping attribute notification
 static inline netdev_tx_t dsa_slave_netpoll_send_skb(struct net_device *dev,
 						     struct sk_buff *skb)
 {

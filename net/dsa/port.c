@@ -154,6 +154,19 @@ void dsa_port_bridge_leave(struct dsa_port *dp, struct net_device *br)
 	dsa_port_set_state_now(dp, BR_STATE_FORWARDING);
 }
 
+int dsa_port_mc_disabled(struct dsa_port *dp, bool mc_disabled,
+			 struct switchdev_trans *trans)
+{
+	struct dsa_notifier_mc_disabled_info info = {
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.trans = trans,
+		.mc_disabled = mc_disabled,
+	};
+
+	return dsa_port_notify(dp, DSA_NOTIFIER_MC_DISABLED, &info);
+}
+
 int dsa_port_vlan_filtering(struct dsa_port *dp, bool vlan_filtering,
 			    struct switchdev_trans *trans)
 {

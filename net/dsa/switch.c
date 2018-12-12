@@ -303,6 +303,31 @@ static int dsa_switch_vlan_filtering(struct dsa_switch *ds,
 	return 0;
 }
 
+static int dsa_switch_mc_disabled(struct dsa_switch *ds,
+				  struct dsa_notifier_mc_disabled_info *info)
+{
+	struct switchdev_trans *trans = info->trans;
+	bool mc_disabled = info->mc_disabled;
+	int port = info->port;
+	int err;
+
+	if (switchdev_trans_ph_prepare(trans))
+		return ds->ops->port_mc_disabled ? 0 : -EOPNOTSUPP;
+
+	/* Build a mask of port members */
+	bitmap_zero(ds->bitmap, ds->num_ports);
+	if (ds->index == info->sw_index)
+		set_bit(port, ds->bitmap);
+
+	for_each_set_bit(port, ds->bitmap, ds->num_ports) {
+		err = ds->ops->port_mc_disabled(ds, port, mc_disabled);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int dsa_switch_event(struct notifier_block *nb,
 			    unsigned long event, void *info)
 {
@@ -339,6 +364,9 @@ static int dsa_switch_event(struct notifier_block *nb,
 		break;
 	case DSA_NOTIFIER_VLAN_FILTERING:
 		err = dsa_switch_vlan_filtering(ds, info);
+		break;
+	case DSA_NOTIFIER_MC_DISABLED:
+		err = dsa_switch_mc_disabled(ds, info);
 		break;
 	default:
 		err = -EOPNOTSUPP;
