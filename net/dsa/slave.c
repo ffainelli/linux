@@ -337,6 +337,10 @@ static int dsa_slave_port_attr_set(struct net_device *dev,
 	case SWITCHDEV_ATTR_ID_BRIDGE_AGEING_TIME:
 		ret = dsa_port_ageing_time(dp, attr->u.ageing_time, trans);
 		break;
+	case SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED:
+		ret = dsa_port_multicast_toggle(dp, attr->u.mc_disabled,
+						trans);
+		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;
