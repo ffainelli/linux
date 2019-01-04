@@ -813,20 +813,22 @@ static void br_ip6_multicast_port_query_expired(struct timer_list *t)
 }
 #endif
 
-static void br_mc_disabled_update(struct net_device *dev, bool value)
+static int br_mc_disabled_update(struct net_device *dev, bool value)
 {
 	struct switchdev_attr attr = {
 		.orig_dev = dev,
 		.id = SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED,
-		.flags = SWITCHDEV_F_DEFER,
+		.flags = SWITCHDEV_F_DEFER | SWITCHDEV_F_SKIP_EOPNOTSUPP,
 		.u.mc_disabled = !value,
 	};
 
-	switchdev_port_attr_set(dev, &attr);
+	return switchdev_port_attr_set(dev, &attr);
 }
 
 int br_multicast_add_port(struct net_bridge_port *port)
 {
+	int ret;
+
 	port->multicast_router = MDB_RTR_TYPE_TEMP_QUERY;
 
 	timer_setup(&port->multicast_router_timer,
@@ -837,8 +839,11 @@ int br_multicast_add_port(struct net_bridge_port *port)
 	timer_setup(&port->ip6_own_query.timer,
 		    br_ip6_multicast_port_query_expired, 0);
 #endif
-	br_mc_disabled_update(port->dev,
-			      br_opt_get(port->br, BROPT_MULTICAST_ENABLED));
+	ret = br_mc_disabled_update(port->dev,
+				    br_opt_get(port->br,
+					       BROPT_MULTICAST_ENABLED));
+	if (ret)
+		return ret;
 
 	port->mcast_stats = netdev_alloc_pcpu_stats(struct bridge_mcast_stats);
 	if (!port->mcast_stats)
@@ -1937,12 +1942,16 @@ static void br_multicast_start_querier(struct net_bridge *br,
 int br_multicast_toggle(struct net_bridge *br, unsigned long val)
 {
 	struct net_bridge_port *port;
+	int err = 0;
 
 	spin_lock_bh(&br->multicast_lock);
 	if (!!br_opt_get(br, BROPT_MULTICAST_ENABLED) == !!val)
 		goto unlock;
 
-	br_mc_disabled_update(br->dev, val);
+	err = br_mc_disabled_update(br->dev, val);
+	if (err)
+		goto unlock;
+
 	br_opt_toggle(br, BROPT_MULTICAST_ENABLED, !!val);
 	if (!br_opt_get(br, BROPT_MULTICAST_ENABLED))
 		goto unlock;
@@ -1957,7 +1966,7 @@ int br_multicast_toggle(struct net_bridge *br, unsigned long val)
 unlock:
 	spin_unlock_bh(&br->multicast_lock);
 
-	return 0;
+	return err;
 }
 
 bool br_multicast_enabled(const struct net_device *dev)
