@@ -50,6 +50,7 @@ enum switchdev_attr_id {
 	SWITCHDEV_ATTR_ID_BRIDGE_AGEING_TIME,
 	SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING,
 	SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED,
+	SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED_SUPPORT,
 	SWITCHDEV_ATTR_ID_BRIDGE_MROUTER,
 };
 
@@ -66,6 +67,7 @@ struct switchdev_attr {
 		clock_t ageing_time;			/* BRIDGE_AGEING_TIME */
 		bool vlan_filtering;			/* BRIDGE_VLAN_FILTERING */
 		bool mc_disabled;			/* MC_DISABLED */
+		bool mc_disabled_support;		/* MC_DISABLED_SUPPORT */
 	} u;
 };
 
