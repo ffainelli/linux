@@ -277,6 +277,32 @@ static int dsa_switch_vlan_del(struct dsa_switch *ds,
 	return 0;
 }
 
+static int dsa_switch_vlan_filtering(struct dsa_switch *ds,
+				     struct dsa_notifier_vlan_filtering_info *info)
+{
+	struct switchdev_trans *trans = info->trans;
+	bool vlan_filtering = info->vlan_filtering;
+	int port = info->port;
+	int err;
+
+	/* bridge skips -EOPNOTSUPP, so skip the prepare phase */
+	if (switchdev_trans_ph_prepare(trans))
+		return 0;
+
+	/* Build a mask of port members */
+	bitmap_zero(ds->bitmap, ds->num_ports);
+	if (ds->index == info->sw_index)
+		set_bit(port, ds->bitmap);
+
+	for_each_set_bit(port, ds->bitmap, ds->num_ports) {
+		err = ds->ops->port_vlan_filtering(ds, port, vlan_filtering);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int dsa_switch_event(struct notifier_block *nb,
 			    unsigned long event, void *info)
 {
@@ -310,6 +336,9 @@ static int dsa_switch_event(struct notifier_block *nb,
 		break;
 	case DSA_NOTIFIER_VLAN_DEL:
 		err = dsa_switch_vlan_del(ds, info);
+		break;
+	case DSA_NOTIFIER_VLAN_FILTERING:
+		err = dsa_switch_vlan_filtering(ds, info);
 		break;
 	default:
 		err = -EOPNOTSUPP;

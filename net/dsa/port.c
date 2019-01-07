@@ -157,17 +157,14 @@ void dsa_port_bridge_leave(struct dsa_port *dp, struct net_device *br)
 int dsa_port_vlan_filtering(struct dsa_port *dp, bool vlan_filtering,
 			    struct switchdev_trans *trans)
 {
-	struct dsa_switch *ds = dp->ds;
+	struct dsa_notifier_vlan_filtering_info info = {
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.trans = trans,
+		.vlan_filtering = vlan_filtering,
+	};
 
-	/* bridge skips -EOPNOTSUPP, so skip the prepare phase */
-	if (switchdev_trans_ph_prepare(trans))
-		return 0;
-
-	if (ds->ops->port_vlan_filtering)
-		return ds->ops->port_vlan_filtering(ds, dp->index,
-						    vlan_filtering);
-
-	return 0;
+	return dsa_port_notify(dp, DSA_NOTIFIER_VLAN_FILTERING, &info);
 }
 
 int dsa_port_ageing_time(struct dsa_port *dp, clock_t ageing_clock,
