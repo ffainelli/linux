@@ -26,6 +26,7 @@ enum {
 	DSA_NOTIFIER_MDB_DEL,
 	DSA_NOTIFIER_VLAN_ADD,
 	DSA_NOTIFIER_VLAN_DEL,
+	DSA_NOTIFIER_VLAN_FILTERING,
 };
 
 /* DSA_NOTIFIER_AGEING_TIME */
@@ -57,9 +58,17 @@ struct dsa_notifier_mdb_info {
 	int port;
 };
 
-/* DSA_NOTIFIER_VLAN_* */
+/* DSA_NOTIFIER_VLAN_{ADD,DEL} */
 struct dsa_notifier_vlan_info {
 	const struct switchdev_obj_port_vlan *vlan;
+	struct switchdev_trans *trans;
+	int sw_index;
+	int port;
+};
+
+/* DSA_NOTIFIER_VLAN_FILTERING */
+struct dsa_notifier_vlan_filtering_info {
+	bool vlan_filtering;
 	struct switchdev_trans *trans;
 	int sw_index;
 	int port;
