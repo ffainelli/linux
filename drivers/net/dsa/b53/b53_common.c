@@ -427,6 +427,9 @@ static void b53_enable_vlan(struct b53_device *dev, bool enable,
 
 	dev->vlan_enabled = enable;
 	dev->vlan_filtering_enabled = enable_filtering;
+
+	dev_dbg(dev->dev, "VLAN: %d, filtering: %d\n",
+		dev->vlan_enabled, dev->vlan_filtering_enabled);
 }
 
 static int b53_set_jumbo(struct b53_device *dev, bool enable, bool allow_10_100)
@@ -1343,6 +1346,8 @@ int b53_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering)
 		new_pvid = dev->ports[port].pvid;
 	}
 
+	dev_dbg(ds->dev, "PVID: %d, new PVID: %d\n", pvid, new_pvid);
+
 	if (pvid != new_pvid)
 		b53_write16(dev, B53_VLAN_PAGE, B53_VLAN_PORT_DEF_TAG(port),
 			    new_pvid);
@@ -1385,7 +1390,7 @@ void b53_vlan_add(struct dsa_switch *ds, int port,
 		b53_get_vlan_entry(dev, vid, vl);
 
 		vl->members |= BIT(port);
-		if (untagged && !dsa_is_cpu_port(ds, port))
+		if (untagged) //!dsa_is_cpu_port(ds, port))
 			vl->untag |= BIT(port);
 		else
 			vl->untag &= ~BIT(port);
@@ -1758,6 +1763,8 @@ int b53_mc_disabled(struct dsa_switch *ds, int port, bool mc_disabled)
 		mc_ctrl &= ~BIT(port);
 	b53_write16(dev, B53_CTRL_PAGE, B53_IPMC_FLOOD_MASK, mc_ctrl);
 
+	dev_dbg(dev->dev, "MC: %d, port: %d\n", mc_disabled, port);
+
 	return 0;
 }
 EXPORT_SYMBOL(b53_mc_disabled);
@@ -1783,6 +1790,9 @@ void b53_mdb_add(struct dsa_switch *ds, int port,
 	struct b53_device *priv = ds->priv;
 	int ret;
 
+	dev_dbg(ds->dev, "Adding, port: %d MAC: %pM, VID: %d\n",
+		port, mdb->addr, mdb->vid);
+
 	ret = b53_arl_op(priv, 0, port, mdb->addr, mdb->vid, true);
 	if (ret)
 		dev_err(ds->dev, "failed to add MDB entry\n");
@@ -1794,6 +1804,9 @@ int b53_mdb_del(struct dsa_switch *ds, int port,
 {
 	struct b53_device *priv = ds->priv;
 	int ret;
+
+	dev_dbg(ds->dev, "Removing, port: %d MAC: %pM, VID: %d\n",
+		port, mdb->addr, mdb->vid);
 
 	ret = b53_arl_op(priv, 0, port, mdb->addr, mdb->vid, false);
 	if (ret)
