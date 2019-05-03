@@ -1305,6 +1305,8 @@ int dsa_slave_suspend(struct net_device *slave_dev)
 	phylink_stop(dp->pl);
 	rtnl_unlock();
 
+	dsa_port_disable(dp);
+
 	return 0;
 }
 
@@ -1316,6 +1318,8 @@ int dsa_slave_resume(struct net_device *slave_dev)
 		return 0;
 
 	netif_device_attach(slave_dev);
+
+	dsa_port_enable(dp, slave_dev->phydev);
 
 	rtnl_lock();
 	phylink_start(dp->pl);
