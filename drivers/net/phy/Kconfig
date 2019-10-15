@@ -248,6 +248,15 @@ config LED_TRIGGER_PHY
 		<Speed in megabits>Mbps OR <Speed in gigabits>Gbps OR link
 		for any speed known to the PHY.
 
+config RGMII_DEBUG
+	bool "Support debugging of RGMII connections"
+	---help---
+	   This enables support for troubleshooting RGMII connections by
+	   making use of the PHY devices standard loopback feature in order to
+	   probe the correct RGMII connection.
+
+	   If unsure, say N here.
+
 
 comment "MII PHY device drivers"
 

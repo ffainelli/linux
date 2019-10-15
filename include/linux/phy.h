@@ -1287,4 +1287,13 @@ module_exit(phy_module_exit)
 bool phy_driver_is_genphy(struct phy_device *phydev);
 bool phy_driver_is_genphy_10g(struct phy_device *phydev);
 
+#ifdef CONFIG_RGMII_DEBUG
+int phy_rgmii_debug_probe(struct phy_device *phydev);
+#else
+static inline int phy_rgmii_debug_probe(struct phy_device *phydev)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 #endif /* __PHY_H */

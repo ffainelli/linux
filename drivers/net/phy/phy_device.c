@@ -537,10 +537,37 @@ phy_has_fixups_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(phy_has_fixups);
 
+static ssize_t
+phy_rgmii_debug_enable_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct phy_device *phydev = to_phy_device(dev);
+	unsigned int val;
+	int ret = -EPERM;
+
+	if (!capable(CAP_NET_ADMIN))
+		goto out;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret)
+		goto out;
+
+	if (val != 1) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = phy_rgmii_debug_probe(phydev);
+out:
+	return ret;
+}
+static DEVICE_ATTR_WO(phy_rgmii_debug_enable);
+
 static struct attribute *phy_dev_attrs[] = {
 	&dev_attr_phy_id.attr,
 	&dev_attr_phy_interface.attr,
 	&dev_attr_phy_has_fixups.attr,
+	&dev_attr_phy_rgmii_debug_enable.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(phy_dev);
