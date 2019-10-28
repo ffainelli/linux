@@ -1933,6 +1933,22 @@ out:
 }
 EXPORT_SYMBOL(b53_get_tag_protocol);
 
+int b53_elect_cpu_port(struct dsa_switch *ds, int port)
+{
+	struct b53_device *dev = ds->priv;
+	int cpu_port = dev->cpu_port;
+
+	if (is5325(dev) || is5365(dev))
+		cpu_port = B53_CPU_PORT_25;
+
+	/* We would prefer to use a different CPU port that this one */
+	if (port != cpu_port)
+		return -EINVAL;
+
+	return 0;
+}
+EXPORT_SYMBOL(b53_elect_cpu_port);
+
 int b53_mirror_add(struct dsa_switch *ds, int port,
 		   struct dsa_mall_mirror_tc_entry *mirror, bool ingress)
 {
@@ -2082,6 +2098,7 @@ static int b53_get_max_mtu(struct dsa_switch *ds, int port)
 
 static const struct dsa_switch_ops b53_switch_ops = {
 	.get_tag_protocol	= b53_get_tag_protocol,
+	.elect_cpu_port		= b53_elect_cpu_port,
 	.setup			= b53_setup,
 	.get_strings		= b53_get_strings,
 	.get_ethtool_stats	= b53_get_ethtool_stats,

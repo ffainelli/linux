@@ -956,6 +956,7 @@ static int bcm_sf2_sw_get_sset_count(struct dsa_switch *ds, int port,
 
 static const struct dsa_switch_ops bcm_sf2_ops = {
 	.get_tag_protocol	= b53_get_tag_protocol,
+	.elect_cpu_port		= b53_elect_cpu_port,
 	.setup			= bcm_sf2_sw_setup,
 	.get_strings		= bcm_sf2_sw_get_strings,
 	.get_ethtool_stats	= bcm_sf2_sw_get_ethtool_stats,
