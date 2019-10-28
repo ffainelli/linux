@@ -193,13 +193,24 @@ static bool dsa_tree_setup_routing_table(struct dsa_switch_tree *dst)
 	return complete;
 }
 
-static struct dsa_port *dsa_tree_find_first_cpu(struct dsa_switch_tree *dst)
+static struct dsa_port *dsa_tree_find_cpu(struct dsa_switch_tree *dst)
 {
+	struct dsa_switch *ds;
 	struct dsa_port *dp;
+	int err;
 
-	list_for_each_entry(dp, &dst->ports, list)
-		if (dsa_port_is_cpu(dp))
+	list_for_each_entry(dp, &dst->ports, list) {
+		ds = dp->ds;
+		if (!dsa_port_is_cpu(dp))
+			continue;
+
+		if (!ds->ops->elect_cpu_port)
 			return dp;
+
+		err = ds->ops->elect_cpu_port(ds, dp->index);
+		if (err == 0)
+			return dp;
+	}
 
 	return NULL;
 }
@@ -208,7 +219,7 @@ static int dsa_tree_setup_default_cpu(struct dsa_switch_tree *dst)
 {
 	struct dsa_port *cpu_dp, *dp;
 
-	cpu_dp = dsa_tree_find_first_cpu(dst);
+	cpu_dp = dsa_tree_find_cpu(dst);
 	if (!cpu_dp) {
 		pr_err("DSA: tree %d has no CPU port\n", dst->index);
 		return -EINVAL;
