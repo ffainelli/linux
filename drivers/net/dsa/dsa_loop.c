@@ -65,7 +65,7 @@ static enum dsa_tag_protocol dsa_loop_get_protocol(struct dsa_switch *ds,
 {
 	dev_dbg(ds->dev, "%s: port: %d\n", __func__, port);
 
-	return DSA_TAG_PROTO_NONE;
+	return DSA_TAG_PROTO_8021Q;
 }
 
 static int dsa_loop_setup(struct dsa_switch *ds)
