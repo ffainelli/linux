@@ -341,10 +341,52 @@ struct sk_buff *dsa_8021q_remove_header(struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(dsa_8021q_remove_header);
 
+static struct sk_buff *__dsa_8021q_xmit(struct sk_buff *skb,
+				        struct net_device *netdev)
+{
+	struct dsa_port *dp = dsa_slave_to_port(netdev);
+	struct dsa_switch *ds = dp->ds;
+	u16 tx_vid = dsa_8021q_tx_vid(ds, dp->index);
+	u16 queue_mapping = skb_get_queue_mapping(skb);
+	u8 pcp = netdev_txq_to_tc(netdev, queue_mapping);
+
+	if (dsa_port_is_vlan_filtering(dp))
+		return skb;
+
+	return dsa_8021q_xmit(skb, netdev, ETH_P_8021Q,
+			     ((pcp << VLAN_PRIO_SHIFT) | tx_vid));
+}
+
+static struct sk_buff *dsa_8021q_rcv(struct sk_buff *skb,
+				     struct net_device *netdev,
+				     struct packet_type *pt)
+{
+	int source_port, switch_id;
+	struct vlan_ethhdr *hdr;
+	u16 vid, tci;
+
+	hdr = vlan_eth_hdr(skb);
+	tci = ntohs(hdr->h_vlan_TCI);
+	vid = tci & VLAN_VID_MASK;
+	source_port = dsa_8021q_rx_source_port(vid);
+	switch_id = dsa_8021q_rx_switch_id(vid);
+	skb->priority = (tci & VLAN_PRIO_MASK) >> VLAN_PRIO_SHIFT;
+
+	skb->dev = dsa_master_find_slave(netdev, switch_id, source_port);
+	if (!skb->dev) {
+		netdev_warn(netdev, "Couldn't decode source port\n");
+		return NULL;
+	}
+
+	return dsa_8021q_remove_header(skb);
+}
+
 static const struct dsa_device_ops dsa_8021q_netdev_ops = {
 	.name		= "8021q",
 	.proto		= DSA_TAG_PROTO_8021Q,
 	.overhead	= VLAN_HLEN,
+	.xmit		= __dsa_8021q_xmit,
+	.rcv		= dsa_8021q_rcv,
 };
 
 MODULE_LICENSE("GPL v2");
