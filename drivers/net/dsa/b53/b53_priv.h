@@ -118,6 +118,7 @@ struct b53_device {
 	struct mutex reg_mutex;
 	struct mutex stats_mutex;
 	const struct b53_io_ops *ops;
+	u32 int_sts;
 
 	/* chip specific data */
 	u32 chip_id;

@@ -798,6 +798,7 @@ static int b53_mii_bus_setup(struct dsa_switch *ds)
 {
 	struct mii_bus *bus = ds->slave_mii_bus;
 	struct b53_device *dev = ds->priv;
+	unsigned int irq_offs = dev->link_sts_offset;
 	unsigned int port, err_port;
 	int irq, ret;
 
@@ -809,7 +810,7 @@ static int b53_mii_bus_setup(struct dsa_switch *ds)
 		if (dsa_is_cpu_port(ds, port) || dsa_is_unused_port(ds, port))
 			continue;
 
-		irq = irq_find_mapping(dev->irq_chip.domain, port);
+		irq = irq_find_mapping(dev->irq_chip.domain, port + irq_offs);
 		if (irq < 0) {
 			ret = irq;
 			goto out;
@@ -2192,6 +2193,11 @@ static irqreturn_t b53_irq_thread_work(struct b53_device *dev)
 	u32 sts;
 
 	b53_read32(dev, B53_MIB_AC_PAGE, B53_INT_STS, &sts);
+	if (sts != dev->int_sts) {
+		dev_info(dev->dev, "sts: 0x%08x\n", sts);
+		dev->int_sts = sts;
+	}
+
 	if (unlikely(sts == 0))
 		goto out;
 
@@ -2224,6 +2230,7 @@ static void b53_irq_mask(struct irq_data *d)
 {
 	struct b53_device *dev = irq_data_get_irq_chip_data(d);
 
+	dev_info(dev->dev, "masking: 0x%08x\n", BIT(d->hwirq));
 	dev->irq_chip.masked |= BIT(d->hwirq);
 }
 
@@ -2232,6 +2239,7 @@ static void b53_irq_unmask(struct irq_data *d)
 	struct b53_device *dev = irq_data_get_irq_chip_data(d);
 
 	dev->irq_chip.masked &= ~BIT(d->hwirq);
+	dev_info(dev->dev, "unmasking: 0x%08x\n", BIT(d->hwirq));
 }
 
 static void b53_irq_bus_lock(struct irq_data *d)
@@ -2244,13 +2252,14 @@ static void b53_irq_bus_lock(struct irq_data *d)
 static void b53_irq_bus_sync_unlock(struct irq_data *d)
 {
 	struct b53_device *dev = irq_data_get_irq_chip_data(d);
-	u32 mask = GENMASK(dev->num_ports, 0);
+	unsigned int irq_offs = dev->link_sts_offset;
+	u32 mask = GENMASK(dev->num_ports + irq_offs, irq_offs - 1);
 	u32 int_en;
 
 	if (is5325(dev) || is5365(dev) || is539x(dev))
 		goto out;
 
-	/* Use an unlocked operation */
+	/* Use an unlocked operation since we are called under irq_bus_lock() */
 	dev->ops->read32(dev, B53_MIB_AC_PAGE, B53_INT_EN, &int_en);
 
 	int_en &= ~mask;
@@ -2279,50 +2288,22 @@ static int b53_irq_domain_map(struct irq_domain *d,
 	irq_set_chip_and_handler(irq, &dev->irq_chip.chip, handle_level_irq);
 	irq_set_noprobe(irq);
 
-	return 0;
-}
-
-static int b53_irq_domain_xlate(struct irq_domain *d, struct device_node *dn,
-				const u32 *intspec, unsigned int intsize,
-				unsigned long *out_hwirq,
-				unsigned int *out_type)
-{
-	struct b53_device *dev = d->host_data;
-
-	if (WARN_ON(intsize < 1))
-		return -EINVAL;
-
-	/* These chips do not have a real interrupt controller so instead
-	 * we can 1:1 map the interrupt that is per-port/PHY to the
-	 * LNKSTS register.
-	 */
-	if (is5325(dev) || is5365(dev) || is539x(dev)) {
-		*out_hwirq = intspec[0];
-		return 0;
-	}
-
-	/* These chips do have a real interrupt controller but we still want
-	 * to remap the per-port interrupts to be offset by the link change
-	 * interrupt shift to facilitate lookups using LNKSTS register which
-	 * maps ports from bit 0 -> bit 9.
-	 */
-	if (intspec[0] > dev->num_ports)
-		return -EINVAL;
-
-	*out_hwirq = intspec[0] + LNK_STS_INT_CHANGE_SHIFT;
+	dev_info(dev->dev, "mapped IRQ%d to HWIRQ: %ld\n", irq, hwirq);
 
 	return 0;
 }
 
 static const struct irq_domain_ops b53_irq_domain_ops = {
 	.map	= b53_irq_domain_map,
-	.xlate	= b53_irq_domain_xlate,
 };
 
 static int b53_irq_setup_common(struct b53_device *dev)
 {
 	unsigned int irq_offs = dev->link_sts_offset;
 	int irq;
+
+	/* Clear all interrupts */
+	b53_write32(dev, B53_MIB_AC_PAGE, B53_INT_EN, 0);
 
 	dev->irq_chip.domain = irq_domain_add_simple(dev->dev->of_node,
 						     dev->num_ports + irq_offs,
@@ -2343,15 +2324,9 @@ static int b53_irq_setup_common(struct b53_device *dev)
 static void b53_irq_free_common(struct b53_device *dev)
 {
 	unsigned int irq_offs = dev->link_sts_offset;
-	u32 int_en, mask;
 	int port, virq;
 
-	mask = GENMASK(dev->num_ports, 0);
-	mask <<= irq_offs;
-
-	dev->ops->read32(dev, B53_MIB_AC_PAGE, B53_INT_EN, &int_en);
-	int_en &= ~mask;
-	dev->ops->write32(dev, B53_MIB_AC_PAGE, B53_INT_EN, int_en);
+	dev->ops->write32(dev, B53_MIB_AC_PAGE, B53_INT_EN, 0);
 
 	for (port = irq_offs; port < dev->num_ports + irq_offs; port++) {
 		virq = irq_find_mapping(dev->irq_chip.domain, port);
