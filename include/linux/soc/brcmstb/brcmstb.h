@@ -35,4 +35,6 @@ static inline u32 brcmstb_get_product_id(void)
 }
 #endif
 
+int brcmstb_regsave_init(void);
+
 #endif /* __BRCMSTB_SOC_H */
