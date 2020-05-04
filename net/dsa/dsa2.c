@@ -647,6 +647,7 @@ static enum dsa_tag_protocol dsa_get_tag_protocol(struct dsa_port *dp,
 	 * happens the switch driver may want to know if its tagging protocol
 	 * is going to work in such a configuration.
 	 */
+	dev_hold(master);
 	if (dsa_slave_dev_check(master)) {
 		mdp = dsa_slave_to_port(master);
 		mds = mdp->ds;
@@ -654,6 +655,7 @@ static enum dsa_tag_protocol dsa_get_tag_protocol(struct dsa_port *dp,
 		tag_protocol = mds->ops->get_tag_protocol(mds, mdp_upstream,
 							  DSA_TAG_PROTO_NONE);
 	}
+	dev_put(master);
 
 	/* If the master device is not itself a DSA slave in a disjoint DSA
 	 * tree, then return immediately.
@@ -678,6 +680,7 @@ static int dsa_port_parse_cpu(struct dsa_port *dp, struct net_device *master)
 		return PTR_ERR(tag_ops);
 	}
 
+	dev_hold(master);
 	dp->master = master;
 	dp->type = DSA_PORT_TYPE_CPU;
 	dp->filter = tag_ops->filter;
@@ -879,6 +882,8 @@ static void dsa_switch_release_ports(struct dsa_switch *ds)
 		if (dp->ds != ds)
 			continue;
 		list_del(&dp->list);
+		if (dsa_port_is_cpu(dp))
+			dev_put(dp->master);
 		kfree(dp);
 	}
 }
