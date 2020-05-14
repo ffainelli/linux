@@ -16,12 +16,15 @@
 #include <linux/soc/brcmstb/aon_defs.h>
 #include <linux/soc/brcmstb/brcmstb.h>
 #include <linux/soc/brcmstb/brcmstb-smccc.h>
+#include <linux/reboot.h>
 
 #include <uapi/linux/psci.h>
 
 #include <asm/suspend.h>
+#include <asm/system_misc.h>
 
 static psci_fn *invoke_psci_fn;
+static bool brcmstb_psci_system_reset2_supported;
 
 static int brcmstb_psci_integ_region(unsigned long function_id,
 				     unsigned long base,
@@ -67,7 +70,31 @@ static int brcmstb_psci_system_mem_finish(void)
 	return cpu_suspend(0, psci_system_suspend);
 }
 
-static void brcmstb_psci_sys_poweroff(void)
+static int brcmstb_psci_sys_reset(struct notifier_block *nb,
+				  unsigned long action, void *data)
+{
+	if ((action == REBOOT_COLD || action == REBOOT_WARM ||
+	    action == REBOOT_SOFT) &&
+	    brcmstb_psci_system_reset2_supported) {
+		/*
+		 * reset_type[31] = 0 (architectural)
+		 * reset_type[30:0] = 0 (SYSTEM_WARM_RESET)
+		 * cookie = 0 (ignored by the implementation)
+		 */
+		invoke_psci_fn(PSCI_FN_NATIVE(1_1, SYSTEM_RESET2), 0, 0, 0);
+	} else {
+		invoke_psci_fn(PSCI_0_2_FN_SYSTEM_RESET, 0, 0, 0);
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block brcmstb_psci_sys_reset_nb = {
+	.notifier_call	= brcmstb_psci_sys_reset,
+	.priority	= 128,
+};
+
+void brcmstb_psci_sys_poweroff(void)
 {
 	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_OFF, 0, 0, 0);
 }
@@ -182,6 +209,10 @@ int brcmstb_pm_psci_init(void)
 		}
 	}
 
+	ret = psci_features(PSCI_FN_NATIVE(1_1, SYSTEM_RESET2));
+	if (ret != PSCI_RET_NOT_SUPPORTED)
+		brcmstb_psci_system_reset2_supported = true;
+
 	ret = brcmstb_psci_integ_region_reset_all();
 	if (ret != PSCI_RET_SUCCESS) {
 		pr_err("Error resetting all integrity checking regions\n");
@@ -205,6 +236,7 @@ int brcmstb_pm_psci_init(void)
 		return ret;
 
 	pm_power_off = brcmstb_psci_sys_poweroff;
+	register_restart_handler(&brcmstb_psci_sys_reset_nb);
 	suspend_set_ops(&brcmstb_psci_ops);
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &brcmstb_psci_nb);
