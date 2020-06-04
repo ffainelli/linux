@@ -152,7 +152,7 @@
 		};
 
 		spi3: spi@7e204600 {
-			compatible = "brcm,bcm2835-spi";
+			compatible = "brcm,bcm2711-spi", "brcm,bcm2835-spi";
 			reg = <0x7e204600 0x0200>;
 			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clocks BCM2835_CLOCK_VPU>;
@@ -162,7 +162,7 @@
 		};
 
 		spi4: spi@7e204800 {
-			compatible = "brcm,bcm2835-spi";
+			compatible = "brcm,bcm2711-spi", "brcm,bcm2835-spi";
 			reg = <0x7e204800 0x0200>;
 			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clocks BCM2835_CLOCK_VPU>;
@@ -172,7 +172,7 @@
 		};
 
 		spi5: spi@7e204a00 {
-			compatible = "brcm,bcm2835-spi";
+			compatible = "brcm,bcm2711-spi", "brcm,bcm2835-spi";
 			reg = <0x7e204a00 0x0200>;
 			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clocks BCM2835_CLOCK_VPU>;
@@ -182,7 +182,7 @@
 		};
 
 		spi6: spi@7e204c00 {
-			compatible = "brcm,bcm2835-spi";
+			compatible = "brcm,bcm2711-spi", "brcm,bcm2835-spi";
 			reg = <0x7e204c00 0x0200>;
 			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clocks BCM2835_CLOCK_VPU>;
