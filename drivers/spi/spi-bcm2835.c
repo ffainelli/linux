@@ -361,11 +361,10 @@ static void bcm2835_spi_reset_hw(struct spi_controller *ctlr)
 	bcm2835_wr(bs, BCM2835_SPI_DLEN, 0);
 }
 
-static irqreturn_t bcm2835_spi_interrupt(int irq, void *dev_id)
+static inline irqreturn_t bcm2835_spi_interrupt_common(struct spi_controller *ctlr,
+						       u32 cs)
 {
-	struct spi_controller *ctlr = dev_id;
 	struct bcm2835_spi *bs = spi_controller_get_devdata(ctlr);
-	u32 cs = bcm2835_rd(bs, BCM2835_SPI_CS);
 
 	/*
 	 * An interrupt is signaled either if DONE is set (TX FIFO empty)
@@ -392,6 +391,27 @@ static irqreturn_t bcm2835_spi_interrupt(int irq, void *dev_id)
 	}
 
 	return IRQ_HANDLED;
+}
+
+static irqreturn_t bcm2835_spi_interrupt(int irq, void *dev_id)
+{
+	struct spi_controller *ctlr = dev_id;
+	struct bcm2835_spi *bs = spi_controller_get_devdata(ctlr);
+	u32 cs = bcm2835_rd(bs, BCM2835_SPI_CS);
+
+	return bcm2835_spi_interrupt_common(ctlr, cs);
+}
+
+static irqreturn_t bcm2835_spi_sh_interrupt(int irq, void *dev_id)
+{
+	struct spi_controller *ctlr = dev_id;
+	struct bcm2835_spi *bs = spi_controller_get_devdata(ctlr);
+	u32 cs = bcm2835_rd(bs, BCM2835_SPI_CS);
+
+	if (!(cs & BCM2835_SPI_CS_INTR))
+		return IRQ_NONE;
+
+	return bcm2835_spi_interrupt_common(ctlr, cs);
 }
 
 static int bcm2835_spi_transfer_one_irq(struct spi_controller *ctlr,
@@ -1287,11 +1307,25 @@ static int bcm2835_spi_setup(struct spi_device *spi)
 	return 0;
 }
 
+static const struct of_device_id bcm2835_spi_match[] = {
+	{ .compatible = "brcm,bcm2835-spi", .data = &bcm2835_spi_interrupt },
+	{ .compatible = "brcm,bcm2711-spi", .data = &bcm2835_spi_sh_interrupt },
+	{ .compatible = "brcm,bcm7211-spi", .data = &bcm2835_spi_sh_interrupt },
+	{}
+};
+MODULE_DEVICE_TABLE(of, bcm2835_spi_match);
+
 static int bcm2835_spi_probe(struct platform_device *pdev)
 {
+	irqreturn_t (*bcm2835_spi_isr_func)(int, void *);
 	struct spi_controller *ctlr;
+	unsigned long flags = 0;
 	struct bcm2835_spi *bs;
 	int err;
+
+	bcm2835_spi_isr_func = of_device_get_match_data(&pdev->dev);
+	if (bcm2835_spi_isr_func == &bcm2835_spi_sh_interrupt)
+		flags = IRQF_SHARED;
 
 	ctlr = spi_alloc_master(&pdev->dev, ALIGN(sizeof(*bs),
 						  dma_get_cache_alignment()));
@@ -1344,7 +1378,7 @@ static int bcm2835_spi_probe(struct platform_device *pdev)
 	bcm2835_wr(bs, BCM2835_SPI_CS,
 		   BCM2835_SPI_CS_CLEAR_RX | BCM2835_SPI_CS_CLEAR_TX);
 
-	err = devm_request_irq(&pdev->dev, bs->irq, bcm2835_spi_interrupt, 0,
+	err = devm_request_irq(&pdev->dev, bs->irq, bcm2835_spi_isr_func, flags,
 			       dev_name(&pdev->dev), ctlr);
 	if (err) {
 		dev_err(&pdev->dev, "could not request IRQ: %d\n", err);
@@ -1399,12 +1433,6 @@ static void bcm2835_spi_shutdown(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "failed to shutdown\n");
 }
-
-static const struct of_device_id bcm2835_spi_match[] = {
-	{ .compatible = "brcm,bcm2835-spi", },
-	{}
-};
-MODULE_DEVICE_TABLE(of, bcm2835_spi_match);
 
 static struct platform_driver bcm2835_spi_driver = {
 	.driver		= {
