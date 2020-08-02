@@ -74,6 +74,13 @@ config NET_DSA_TAG_EDSA
 	  Say Y or M if you want to enable support for tagging frames for the
 	  Marvell switches which use EtherType DSA headers.
 
+config NET_DSA_TAG_LOOP
+	tristate "Tag driver for DSA mock-up switch"
+	select NET_DSA_TAG_8021Q
+	help
+	  Say Y or M if you want to enable support for tagging frames for the
+	  DSA mock-up driver (dsa-loop).
+
 config NET_DSA_TAG_MTK
 	tristate "Tag driver for Mediatek switches"
 	help
