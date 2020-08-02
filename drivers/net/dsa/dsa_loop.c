@@ -14,6 +14,7 @@
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/if_bridge.h>
+#include <linux/dsa/8021q.h>
 #include <linux/dsa/loop.h>
 #include <net/dsa.h>
 
@@ -24,6 +25,10 @@ static struct dsa_loop_mib_entry dsa_loop_mibs[] = {
 	[DSA_LOOP_PHY_READ_ERR]	= { "phy_read_err", },
 	[DSA_LOOP_PHY_WRITE_OK] = { "phy_write_ok", },
 	[DSA_LOOP_PHY_WRITE_ERR] = { "phy_write_err", },
+	[DSA_LOOP_VLAN_EGRESS_VID_OK] = { "vlan_egress_vid_ok" },
+	[DSA_LOOP_VLAN_EGRESS_VID_ERR] = { "vlan_egress_vid_err" },
+	[DSA_LOOP_VLAN_INGRESS_VID_OK] = { "vlan_ingress_vid_ok" },
+	[DSA_LOOP_VLAN_INGRESS_VID_ERR] = { "vlan_ingress_vid_err" },
 };
 
 static struct phy_device *phydevs[PHY_MAX_ADDR];
@@ -34,7 +39,7 @@ static enum dsa_tag_protocol dsa_loop_get_protocol(struct dsa_switch *ds,
 {
 	dev_dbg(ds->dev, "%s: port: %d\n", __func__, port);
 
-	return DSA_TAG_PROTO_NONE;
+	return DSA_TAG_PROTO_LOOP;
 }
 
 static int dsa_loop_setup(struct dsa_switch *ds)
@@ -42,13 +47,33 @@ static int dsa_loop_setup(struct dsa_switch *ds)
 	struct dsa_loop_priv *ps = ds->priv;
 	unsigned int i;
 
-	for (i = 0; i < ds->num_ports; i++)
+	for (i = 0; i < ds->num_ports; i++) {
 		memcpy(ps->ports[i].mib, dsa_loop_mibs,
 		       sizeof(dsa_loop_mibs));
+		ps->ports[i].ps = ps;
+		dsa_to_port(ds, i)->priv = &ps->ports[i];
+	}
+
+	return 0;
+}
+
+static int dsa_loop_port_enable(struct dsa_switch *ds, int port,
+				struct phy_device *phydev)
+{
+	int ret = 0;
+
+	if (!dsa_is_user_port(ds, port))
+		return ret;
+
+	ret = dsa_port_setup_8021q_tagging(ds, port, true);
+	if (ret)
+		dev_err(ds->dev,
+			"Failed to setup VLAN for port %d: %d\n",
+			port, ret);
 
 	dev_dbg(ds->dev, "%s\n", __func__);
 
-	return 0;
+	return ret;
 }
 
 static int dsa_loop_get_sset_count(struct dsa_switch *ds, int port, int sset)
@@ -150,8 +175,17 @@ static int
 dsa_loop_port_vlan_prepare(struct dsa_switch *ds, int port,
 			   const struct switchdev_obj_port_vlan *vlan)
 {
+	const struct net_device_ops *ops = NULL;
 	struct dsa_loop_priv *ps = ds->priv;
+	struct net_device *master = NULL;
 	struct mii_bus *bus = ps->bus;
+	unsigned int vid;
+	int ret;
+
+	if (dsa_is_cpu_port(ds, port)) {
+		master = dsa_to_port(ds, port)->master;
+		ops = master->netdev_ops;
+	}
 
 	dev_dbg(ds->dev, "%s: port: %d, vlan: %d-%d",
 		__func__, port, vlan->vid_begin, vlan->vid_end);
@@ -161,6 +195,19 @@ dsa_loop_port_vlan_prepare(struct dsa_switch *ds, int port,
 
 	if (vlan->vid_end > ARRAY_SIZE(ps->vlans))
 		return -ERANGE;
+
+	for (vid = vlan->vid_begin; vid <= vlan->vid_end; ++vid) {
+		if (!master)
+			continue;
+
+		if (!(master->features & NETIF_F_HW_VLAN_CTAG_FILTER))
+			continue;
+
+		ret = ops->ndo_vlan_rx_add_vid(master, ntohs(ETH_P_8021Q),
+					      vid);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -199,7 +246,9 @@ static int dsa_loop_port_vlan_del(struct dsa_switch *ds, int port,
 				  const struct switchdev_obj_port_vlan *vlan)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
+	const struct net_device_ops *ops = NULL;
 	struct dsa_loop_priv *ps = ds->priv;
+	struct net_device *master = NULL;
 	struct mii_bus *bus = ps->bus;
 	struct dsa_loop_vlan *vl;
 	u16 vid, pvid = ps->ports[port].pvid;
@@ -219,6 +268,12 @@ static int dsa_loop_port_vlan_del(struct dsa_switch *ds, int port,
 
 		dev_dbg(ds->dev, "%s: port: %d vlan: %d, %stagged, pvid: %d\n",
 			__func__, port, vid, untagged ? "un" : "", pvid);
+
+		/* Last VLAN member, also remove the VLAN filter on CPU */
+		if ((vl->members == BIT(port)) && master &&
+		    (master->features & NETIF_F_HW_VLAN_CTAG_FILTER))
+			ops->ndo_vlan_rx_kill_vid(master, ntohs(ETH_P_8021Q),
+						  vid);
 	}
 	ps->ports[port].pvid = pvid;
 
@@ -291,6 +346,7 @@ static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
 	ds->dev = &mdiodev->dev;
 	ds->ops = &dsa_loop_driver;
 	ds->priv = ps;
+	ds->configure_vlan_while_not_filtering = true;
 	ps->bus = mdiodev->bus;
 
 	dev_set_drvdata(&mdiodev->dev, ds);

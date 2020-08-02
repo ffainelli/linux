@@ -21,10 +21,15 @@ enum dsa_loop_mib_counters {
 	DSA_LOOP_PHY_READ_ERR,
 	DSA_LOOP_PHY_WRITE_OK,
 	DSA_LOOP_PHY_WRITE_ERR,
+	DSA_LOOP_VLAN_EGRESS_VID_OK,
+	DSA_LOOP_VLAN_EGRESS_VID_ERR,
+	DSA_LOOP_VLAN_INGRESS_VID_OK,
+	DSA_LOOP_VLAN_INGRESS_VID_ERR,
 	__DSA_LOOP_CNT_MAX,
 };
 
 struct dsa_loop_port {
+	struct dsa_loop_priv *ps;
 	struct dsa_loop_mib_entry mib[__DSA_LOOP_CNT_MAX];
 	u16 pvid;
 	int mtu;
