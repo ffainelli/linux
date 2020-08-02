@@ -225,9 +225,25 @@ static int dsa_loop_port_vlan_del(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static int dsa_loop_port_change_mtu(struct dsa_switch *ds, int port,
+				    int new_mtu)
+{
+	struct dsa_loop_priv *priv = ds->priv;
+
+	priv->ports[port].mtu = new_mtu;
+
+	return 0;
+}
+
+static int dsa_loop_port_max_mtu(struct dsa_switch *ds, int port)
+{
+	return ETH_MAX_MTU;
+}
+
 static const struct dsa_switch_ops dsa_loop_driver = {
 	.get_tag_protocol	= dsa_loop_get_protocol,
 	.setup			= dsa_loop_setup,
+	.port_enable		= dsa_loop_port_enable,
 	.get_strings		= dsa_loop_get_strings,
 	.get_ethtool_stats	= dsa_loop_get_ethtool_stats,
 	.get_sset_count		= dsa_loop_get_sset_count,
@@ -241,6 +257,8 @@ static const struct dsa_switch_ops dsa_loop_driver = {
 	.port_vlan_prepare	= dsa_loop_port_vlan_prepare,
 	.port_vlan_add		= dsa_loop_port_vlan_add,
 	.port_vlan_del		= dsa_loop_port_vlan_del,
+	.port_change_mtu	= dsa_loop_port_change_mtu,
+	.port_max_mtu		= dsa_loop_port_max_mtu,
 };
 
 static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
