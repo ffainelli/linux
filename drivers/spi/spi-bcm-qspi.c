@@ -1305,6 +1305,10 @@ static const struct of_device_id bcm_qspi_of_match[] = {
 		.compatible = "brcm,spi-bcm7278-qspi",
 		.data = &bcm_qspi_spcr3_data,
 	},
+	{
+		.compatible = "brcm,spi-nsp-qspi",
+		.data = &bcm_qspi_no_rev_data,
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, bcm_qspi_of_match);
