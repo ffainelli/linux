@@ -1322,23 +1322,6 @@ EXPORT_SYMBOL(b53_phylink_mac_link_up);
 int b53_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering)
 {
 	struct b53_device *dev = ds->priv;
-	u16 pvid, new_pvid;
-
-	b53_read16(dev, B53_VLAN_PAGE, B53_VLAN_PORT_DEF_TAG(port), &pvid);
-	if (!vlan_filtering) {
-		/* Filtering is currently enabled, use the default PVID since
-		 * the bridge does not expect tagging anymore
-		 */
-		dev->ports[port].pvid = pvid;
-		new_pvid = b53_default_pvid(dev);
-	} else {
-		/* Filtering is currently disabled, restore the previous PVID */
-		new_pvid = dev->ports[port].pvid;
-	}
-
-	if (pvid != new_pvid)
-		b53_write16(dev, B53_VLAN_PAGE, B53_VLAN_PORT_DEF_TAG(port),
-			    new_pvid);
 
 	b53_enable_vlan(dev, dev->vlan_enabled, vlan_filtering);
 
@@ -1389,7 +1372,7 @@ void b53_vlan_add(struct dsa_switch *ds, int port,
 			untagged = true;
 
 		vl->members |= BIT(port);
-		if (untagged && !dsa_is_cpu_port(ds, port))
+		if (untagged)
 			vl->untag |= BIT(port);
 		else
 			vl->untag &= ~BIT(port);
@@ -1427,7 +1410,7 @@ int b53_vlan_del(struct dsa_switch *ds, int port,
 		if (pvid == vid)
 			pvid = b53_default_pvid(dev);
 
-		if (untagged && !dsa_is_cpu_port(ds, port))
+		if (untagged)
 			vl->untag &= ~(BIT(port));
 
 		b53_set_vlan_entry(dev, vid, vl);
@@ -2563,6 +2546,8 @@ struct b53_device *b53_switch_alloc(struct device *base,
 	dev->priv = priv;
 	dev->ops = ops;
 	ds->ops = &b53_switch_ops;
+	ds->configure_vlan_while_not_filtering = true;
+	dev->vlan_enabled = ds->configure_vlan_while_not_filtering;
 	mutex_init(&dev->reg_mutex);
 	mutex_init(&dev->stats_mutex);
 
