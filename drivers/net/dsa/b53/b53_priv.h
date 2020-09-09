@@ -226,10 +226,7 @@ int b53_switch_detect(struct b53_device *dev);
 
 int b53_switch_register(struct b53_device *dev);
 
-static inline void b53_switch_remove(struct b53_device *dev)
-{
-	dsa_unregister_switch(dev->ds);
-}
+void b53_switch_remove(struct b53_device *dev);
 
 #define b53_build_op(type_op_size, val_type)				\
 static inline int b53_##type_op_size(struct b53_device *dev, u8 page,	\

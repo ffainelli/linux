@@ -2121,6 +2121,52 @@ static int b53_get_max_mtu(struct dsa_switch *ds, int port)
 	return JMS_MAX_SIZE;
 }
 
+enum b53_devlink_resource_id {
+	B53_DEVLINK_PARMA_ID_VLAN_TABLE,
+};
+
+static u64 b53_devlink_vlan_table_get(void *priv)
+{
+	struct b53_device *dev = priv;
+	unsigned int i, count = 0;
+	struct b53_vlan *vl;
+
+	for (i = 0; i < dev->num_vlans; i++) {
+		vl = &dev->vlans[i];
+		if (vl->members)
+			count++;
+	}
+
+	return count;
+}
+
+static int b53_setup_devlink_resources(struct dsa_switch *ds)
+{
+	struct devlink_resource_size_params size_params;
+	struct b53_device *dev = ds->priv;
+	int err;
+
+	devlink_resource_size_params_init(&size_params, dev->num_vlans,
+					  dev->num_vlans,
+					  1, DEVLINK_RESOURCE_UNIT_ENTRY);
+
+	err = dsa_devlink_resource_register(ds, "VLAN", dev->num_vlans,
+					    B53_DEVLINK_PARMA_ID_VLAN_TABLE,
+					    DEVLINK_RESOURCE_ID_PARENT_TOP,
+					    &size_params);
+	if (err)
+		goto out;
+
+	dsa_devlink_resource_occ_get_register(ds,
+					      B53_DEVLINK_PARMA_ID_VLAN_TABLE,
+					      b53_devlink_vlan_table_get, dev);
+
+	return 0;
+out:
+	dsa_devlink_resources_unregister(ds);
+	return err;
+}
+
 static const struct dsa_switch_ops b53_switch_ops = {
 	.get_tag_protocol	= b53_get_tag_protocol,
 	.setup			= b53_setup,
@@ -2518,7 +2564,7 @@ static int b53_switch_init(struct b53_device *dev)
 			return ret;
 	}
 
-	return 0;
+	return b53_setup_devlink_resources(dev->ds);
 }
 
 struct b53_device *b53_switch_alloc(struct device *base,
@@ -2644,6 +2690,15 @@ int b53_switch_register(struct b53_device *dev)
 	return dsa_register_switch(dev->ds);
 }
 EXPORT_SYMBOL(b53_switch_register);
+
+void b53_switch_remove(struct b53_device *dev)
+{
+	struct dsa_switch *ds = dev->ds;
+
+	dsa_devlink_resources_unregister(ds);
+	dsa_unregister_switch(ds);
+}
+EXPORT_SYMBOL(b53_switch_remove);
 
 MODULE_AUTHOR("Jonas Gorski <jogo@openwrt.org>");
 MODULE_DESCRIPTION("B53 switch library");
