@@ -121,6 +121,7 @@ struct b53_pcs {
 struct b53_port {
 	u16		vlan_ctl_mask;
 	u16		pvid;
+	bool		learning;
 	struct ethtool_keee eee;
 };
 
