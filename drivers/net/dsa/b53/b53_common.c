@@ -554,11 +554,13 @@ static void b53_port_set_learning(struct b53_device *dev, int port,
 	else
 		reg |= BIT(port);
 	b53_write16(dev, B53_CTRL_PAGE, B53_DIS_LEARNING, reg);
+	dev->ports[port].learning = learning;
 }
 
 int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
 {
 	struct b53_device *dev = ds->priv;
+	struct b53_port *p = &dev->ports[port];
 	unsigned int cpu_port;
 	int ret = 0;
 	u16 pvlan;
@@ -570,7 +572,7 @@ int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
 
 	b53_port_set_ucast_flood(dev, port, true);
 	b53_port_set_mcast_flood(dev, port, true);
-	b53_port_set_learning(dev, port, false);
+	b53_port_set_learning(dev, port, p->learning);
 
 	if (dev->ops->irq_enable)
 		ret = dev->ops->irq_enable(dev, port);
