@@ -1439,7 +1439,8 @@ static struct phy_driver broadcom_drivers[] = {
 	.phy_id_mask	= 0xfffffff0,
 	.name		= "Broadcom BCM54210E",
 	/* PHY_GBIT_FEATURES */
-	.flags		= PHY_ALWAYS_CALL_SUSPEND,
+	.flags		= PHY_ALWAYS_CALL_SUSPEND |
+			  PHY_POLL_CABLE_TEST,
 	.get_sset_count	= bcm_phy_get_sset_count,
 	.get_strings	= bcm_phy_get_strings,
 	.get_stats	= bcm54xx_get_stats,
@@ -1453,6 +1454,8 @@ static struct phy_driver broadcom_drivers[] = {
 	.get_wol	= bcm54xx_phy_get_wol,
 	.set_wol	= bcm54xx_phy_set_wol,
 	.led_brightness_set	= bcm_phy_led_brightness_set,
+	.cable_test_start = bcm_phy_cable_test_start,
+	.cable_test_get_status = bcm_phy_cable_test_get_status,
 }, {
 	.phy_id		= PHY_ID_BCM5461,
 	.phy_id_mask	= 0xfffffff0,
