@@ -34,8 +34,8 @@
 #include <asm/processor.h>
 
 #define DRV_NAME	"r6040"
-#define DRV_VERSION	"0.29"
-#define DRV_RELDATE	"04Jul2016"
+#define DRV_VERSION	"0.30"
+#define DRV_RELDATE	"04Apr2021"
 
 /* Time in jiffies before concluding the transmitter is hung. */
 #define TX_TIMEOUT	(6000 * HZ / 1000)
