@@ -944,6 +944,35 @@ static void netdev_get_drvinfo(struct net_device *dev,
 	strlcpy(info->bus_info, pci_name(rp->pdev), sizeof(info->bus_info));
 }
 
+static const u8 r6040_reg_offsets[] = {
+	MCR0, MCR1, MBCR, MT_ICR, MR_ICR, MTPR, MR_BSR, MR_DCR,
+	MLSR, MMDIO, MMRD, MMWD, MTD_SA0, MTD_SA1, MRD_SA0, MRD_SA1,
+	MISR, MIER, ME_CISR, ME_CIER, MR_CNT, ME_CNT0, ME_CNT1, ME_CNT2,
+	ME_CNT3, MT_CNT, ME_CNT4, MP_CNT, MAR0, MAR1, MAR2, MAR3,
+	MID_0L, MID_0M, MID_0H, MID_1L, MID_1M, MID_1H, MID_2L, MID_2M,
+	MID_2H, MID_3L, MID_3M, MID_3H, PHY_CC, PHY_ST, MAC_SM, MAC_ID
+};
+
+static int r6040_get_regs_len(struct net_device *dev)
+{
+	return ARRAY_SIZE(r6040_reg_offsets) * sizeof(u16);
+}
+
+static void r6040_get_regs(struct net_device *dev, struct ethtool_regs *regs,
+			   void *regs_data)
+{
+	struct r6040_private *rp = netdev_priv(dev);
+	u16 *regs_buff = regs_data;
+	unsigned int num = 0;
+
+	memset(regs_data, 0, r6040_get_regs_len(dev));
+	regs->version = (1 << 24 | rp->pdev->revision << 16 |
+			 rp->pdev->device);
+
+	for (num = 0; num < ARRAY_SIZE(r6040_reg_offsets); num++)
+		regs_buff[num] = ioread16(rp->base + r6040_reg_offsets[num]);
+}
+
 static const struct ethtool_ops netdev_ethtool_ops = {
 	.get_drvinfo		= netdev_get_drvinfo,
 	.get_link		= ethtool_op_get_link,
@@ -951,6 +980,8 @@ static const struct ethtool_ops netdev_ethtool_ops = {
 	.get_link_ksettings     = phy_ethtool_get_link_ksettings,
 	.set_link_ksettings     = phy_ethtool_set_link_ksettings,
 	.nway_reset		= phy_ethtool_nway_reset,
+	.get_regs_len		= r6040_get_regs_len,
+	.get_regs		= r6040_get_regs,
 };
 
 static const struct net_device_ops r6040_netdev_ops = {
