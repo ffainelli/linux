@@ -57,7 +57,13 @@
 #define  MAC_RST	0x0001	/* Reset the MAC */
 #define MBCR		0x08	/* Bus control */
 #define MT_ICR		0x0C	/* TX interrupt control */
+#define   TXTIMER_MASK	GENMASK(5, 0)
+#define   TXINTC_MASK	GENMASK(3, 0)
+#define   TXINTC_SHIFT	8
 #define MR_ICR		0x10	/* RX interrupt control */
+#define   RXTIMER_MASK	GENMASK(5, 0)
+#define   RXITNC_MASK	GENTMASK(3, 0)
+#define   RXITNC_SHIFT	8
 #define MTPR		0x14	/* TX poll command register */
 #define  TM2TX		0x0001	/* Trigger MAC to transmit */
 #define MR_BSR		0x18	/* RX buffer size */
@@ -87,6 +93,7 @@
 #define  EVENT_OVRFL	0x0100  /* Event counter overflow */
 #define  LINK_CHANGED	0x0200  /* PHY link changed */
 #define ME_CISR		0x44	/* Event counter INT status */
+#define  INT_CNT_MASK	(GENMASK(11, 0) & ~BIT(6))
 #define ME_CIER		0x48	/* Event counter INT enable  */
 #define MR_CNT		0x50	/* Successfully received packet counter */
 #define ME_CNT0		0x52	/* Event counter 0 */
@@ -158,7 +165,7 @@ MODULE_VERSION(DRV_VERSION " " DRV_RELDATE);
 /* RX and TX interrupts that we handle */
 #define RX_INTS			(RX_FIFO_FULL | RX_NO_DESC | RX_FINISH)
 #define TX_INTS			(TX_FINISH)
-#define INT_MASK		(RX_INTS | TX_INTS)
+#define INT_MASK		(RX_INTS | TX_INTS | EVENT_OVRFL)
 
 struct r6040_descriptor {
 	u16	status, len;		/* 0-3 */
@@ -170,6 +177,24 @@ struct r6040_descriptor {
 	struct sk_buff *skb_ptr;	/* 18-1B */
 	u32	rev2;			/* 1C-1F */
 } __aligned(32);
+
+/* Shadow copy of the counters that overflow too quickly */
+struct r6040_counters {
+	u32	tx_packets;
+	u32	tx_pause;
+	u32	tx_fifo_underrun;
+	u32	tx_late_col;
+
+	u32	rx_packets;
+	u32	rx_pause;
+	u32	rx_desc_over;
+	u32	rx_fifo_full;
+	u32	rx_long;
+	u32	rx_crc;
+	u32	rx_runt;
+	u32	rx_bcast;
+	u32	rx_mcast;
+};
 
 struct r6040_private {
 	spinlock_t lock;		/* driver lock */
@@ -190,6 +215,7 @@ struct r6040_private {
 	void __iomem *base;
 	int old_link;
 	int old_duplex;
+	struct r6040_counters mib;
 };
 
 static char version[] = DRV_NAME
@@ -408,6 +434,8 @@ static void r6040_init_mac_regs(struct net_device *dev)
 
 	/* Enable interrupts */
 	iowrite16(INT_MASK, ioaddr + MIER);
+	/* Enable counter interrupts */
+	iowrite16(INT_CNT_MASK, ioaddr + ME_CIER);
 
 	/* Enable TX and RX */
 	iowrite16(lp->mcr0 | MCR0_RCVEN, ioaddr);
@@ -454,6 +482,9 @@ static void r6040_down(struct net_device *dev)
 	struct r6040_private *lp = netdev_priv(dev);
 	void __iomem *ioaddr = lp->base;
 	const u16 *adrp;
+
+	/* Disable counter overflow interrupt sources */
+	iowrite16(0, ioaddr + ME_CIER);
 
 	/* Stop MAC */
 	iowrite16(MSK_INT, ioaddr + MIER);	/* Mask Off Interrupt */
@@ -643,6 +674,31 @@ static int r6040_poll(struct napi_struct *napi, int budget)
 	return work_done;
 }
 
+static void r6040_snapshot_counters(struct r6040_private *lp)
+{
+	u16 reg;
+
+	/* All registers are read on clear */
+	lp->mib.rx_packets += ioread16(lp->base + MR_CNT);
+	reg = ioread16(lp->base + ME_CNT0);
+	lp->mib.rx_mcast += reg & 0xff;
+	lp->mib.rx_bcast += reg >> 8;
+	reg = ioread16(lp->base + ME_CNT1);
+	lp->mib.rx_crc += reg & 0xff;
+	lp->mib.rx_runt += reg >> 8;
+	lp->mib.rx_long += ioread8(lp->base + ME_CNT2);
+	reg = ioread16(lp->base + ME_CNT3);
+	lp->mib.rx_desc_over += reg & 0xff;
+	lp->mib.rx_fifo_full += reg >> 8;
+	lp->mib.tx_packets += ioread16(lp->base + MT_CNT);
+	reg = ioread16(lp->base + ME_CNT4);
+	lp->mib.tx_late_col += reg & 0xff;
+	lp->mib.tx_fifo_underrun += reg >> 8;
+	reg = ioread16(lp->base + MP_CNT);
+	lp->mib.rx_pause += reg & 0xff;
+	lp->mib.tx_pause += reg >> 8;
+}
+
 /* The RDC interrupt handler. */
 static irqreturn_t r6040_interrupt(int irq, void *dev_id)
 {
@@ -680,6 +736,9 @@ static irqreturn_t r6040_interrupt(int irq, void *dev_id)
 			__napi_schedule_irqoff(&lp->napi);
 		}
 	}
+
+	if (status & EVENT_OVRFL)
+		r6040_snapshot_counters(lp);
 
 	/* Restore RDC MAC interrupt */
 	iowrite16(misr, ioaddr + MIER);
@@ -973,6 +1032,34 @@ static void r6040_get_regs(struct net_device *dev, struct ethtool_regs *regs,
 		regs_buff[num] = ioread16(rp->base + r6040_reg_offsets[num]);
 }
 
+static void r6040_get_eth_mac_stats(struct net_device *dev,
+				    struct ethtool_eth_mac_stats *stats)
+{
+	struct r6040_private *rp = netdev_priv(dev);
+
+	stats->FramesTransmittedOK = rp->mib.tx_packets;
+	stats->FramesLostDueToIntMACXmitError = rp->mib.tx_fifo_underrun;
+	stats->LateCollisions = rp->mib.tx_late_col;
+
+	stats->FramesReceivedOK = rp->mib.rx_packets;
+	stats->FramesLostDueToIntMACRcvError = rp->mib.rx_desc_over +
+						rp->mib.rx_fifo_full;
+	stats->FrameTooLongErrors = rp->mib.rx_long;
+	stats->FrameCheckSequenceErrors = rp->mib.rx_crc;
+	stats->MulticastFramesReceivedOK = rp->mib.rx_mcast;
+	stats->BroadcastFramesReceivedOK = rp->mib.rx_bcast;
+	stats->InRangeLengthErrors = rp->mib.rx_runt;
+}
+
+static void r6040_get_pause_stats(struct net_device *dev,
+				  struct ethtool_pause_stats *stats)
+{
+	struct r6040_private *rp = netdev_priv(dev);
+
+	stats->tx_pause_frames = rp->mib.tx_pause;
+	stats->rx_pause_frames = rp->mib.rx_pause;
+}
+
 static const struct ethtool_ops netdev_ethtool_ops = {
 	.get_drvinfo		= netdev_get_drvinfo,
 	.get_link		= ethtool_op_get_link,
@@ -982,6 +1069,8 @@ static const struct ethtool_ops netdev_ethtool_ops = {
 	.nway_reset		= phy_ethtool_nway_reset,
 	.get_regs_len		= r6040_get_regs_len,
 	.get_regs		= r6040_get_regs,
+	.get_eth_mac_stats	= r6040_get_eth_mac_stats,
+	.get_pause_stats	= r6040_get_pause_stats,
 };
 
 static const struct net_device_ops r6040_netdev_ops = {
