@@ -27,6 +27,7 @@
 static psci_fn *invoke_psci_fn;
 static bool brcmstb_psci_system_reset2_supported;
 static bool brcmstb_psci_system_suspend_supported;
+static bool brcmstb_psci_cpu_retention = true;
 
 static int brcmstb_psci_integ_region(unsigned long function_id,
 				     unsigned long base,
@@ -124,6 +125,13 @@ static int psci_features(u32 psci_func_id)
 	return invoke_psci_fn(features_func_id, psci_func_id, 0, 0);
 }
 
+static int psci_suspend_finisher(unsigned long index)
+{
+	u32 pstate = index;
+
+	return psci_ops.cpu_suspend(pstate, __pa_symbol(cpu_resume));
+}
+
 static int brcmstb_psci_enter(suspend_state_t state)
 {
 	/* Request a SYSTEM level power state with retention */
@@ -133,7 +141,10 @@ static int brcmstb_psci_enter(suspend_state_t state)
 
 	switch (state) {
 	case PM_SUSPEND_STANDBY:
-		ret = psci_ops.cpu_suspend(pstate, 0);
+		if (brcmstb_psci_cpu_retention)
+			ret = psci_ops.cpu_suspend(pstate, 0);
+		else
+			ret = cpu_suspend(pstate, psci_suspend_finisher);
 		break;
 	case PM_SUSPEND_MEM:
 		ret = brcmstb_psci_system_suspend_supported ?
@@ -203,6 +214,35 @@ static ssize_t brcmstb_psci_version_show(struct kobject *kobj,
 
 static struct kobj_attribute brcmstb_psci_version_attr =
 	__ATTR(brcmstb_mon_version, 0400, brcmstb_psci_version_show, NULL);
+
+static ssize_t brcmstb_psci_cpu_retention_show(struct kobject *kobj,
+					       struct kobj_attribute *attr,
+					       char *buf)
+{
+	return sprintf(buf, "%d\n", brcmstb_psci_cpu_retention);
+}
+
+static ssize_t brcmstb_psci_cpu_retention_store(struct kobject *kobj,
+						struct kobj_attribute *attr,
+						const char *buf, size_t count)
+{
+	int ret, val;
+
+	ret = kstrtoint(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val != 0 && val != 1)
+		return -EINVAL;
+
+	brcmstb_psci_cpu_retention = !!val;
+
+	return count;
+}
+
+static struct kobj_attribute brcmstb_psci_cpu_retention_attr =
+	__ATTR(brcmstb_cpu_retention, 0644, brcmstb_psci_cpu_retention_show,
+	       brcmstb_psci_cpu_retention_store);
 
 int brcmstb_pm_psci_init(void)
 {
@@ -276,6 +316,11 @@ int brcmstb_pm_psci_init(void)
 		return ret;
 
 	ret = sysfs_create_file(firmware_kobj, &brcmstb_psci_version_attr.attr);
+	if (ret)
+		return ret;
+
+	ret = sysfs_create_file(firmware_kobj,
+				&brcmstb_psci_cpu_retention_attr.attr);
 	if (ret)
 		return ret;
 
