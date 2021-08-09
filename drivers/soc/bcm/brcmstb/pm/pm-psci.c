@@ -26,6 +26,7 @@
 
 static psci_fn *invoke_psci_fn;
 static bool brcmstb_psci_system_reset2_supported;
+static bool brcmstb_psci_system_suspend_supported;
 
 static int brcmstb_psci_integ_region(unsigned long function_id,
 				     unsigned long base,
@@ -135,7 +136,8 @@ static int brcmstb_psci_enter(suspend_state_t state)
 		ret = psci_ops.cpu_suspend(pstate, 0);
 		break;
 	case PM_SUSPEND_MEM:
-		ret = brcmstb_psci_system_mem_finish();
+		ret = brcmstb_psci_system_suspend_supported ?
+			brcmstb_psci_system_mem_finish() : -EINVAL;
 		break;
 	}
 
@@ -146,8 +148,9 @@ static int brcmstb_psci_valid(suspend_state_t state)
 {
 	switch (state) {
 	case PM_SUSPEND_STANDBY:
-	case PM_SUSPEND_MEM:
 		return true;
+	case PM_SUSPEND_MEM:
+		return brcmstb_psci_system_suspend_supported;
 	default:
 		return false;
 	}
@@ -245,6 +248,10 @@ int brcmstb_pm_psci_init(void)
 	ret = psci_features(PSCI_FN_NATIVE(1_1, SYSTEM_RESET2));
 	if (ret != PSCI_RET_NOT_SUPPORTED)
 		brcmstb_psci_system_reset2_supported = true;
+
+	ret = psci_features(PSCI_FN_NATIVE(1_0, SYSTEM_SUSPEND));
+	if (ret != PSCI_RET_NOT_SUPPORTED)
+		brcmstb_psci_system_suspend_supported = true;
 
 	ret = brcmstb_psci_integ_region_reset_all();
 	if (ret != PSCI_RET_SUCCESS) {
