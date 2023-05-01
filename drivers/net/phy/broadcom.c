@@ -36,6 +36,7 @@ struct bcm54xx_phy_priv {
 	struct bcm_ptp_private *ptp;
 	int	wake_irq;
 	bool	wake_irq_enabled;
+	bool	wake_filter_installed;
 };
 
 static bool bcm54xx_phy_can_wakeup(struct phy_device *phydev)
@@ -860,6 +861,8 @@ static int brcm_fet_suspend(struct phy_device *phydev)
 static void bcm54xx_phy_get_wol(struct phy_device *phydev,
 				struct ethtool_wolinfo *wol)
 {
+	struct bcm54xx_phy_priv *priv = phydev->priv;
+
 	/* We cannot wake-up if we do not have a dedicated PHY interrupt line
 	 * or an out of band GPIO descriptor for wake-up. Zeroing
 	 * wol->supported allows the caller (MAC driver) to play through and
@@ -871,6 +874,8 @@ static void bcm54xx_phy_get_wol(struct phy_device *phydev,
 	}
 
 	bcm_phy_get_wol(phydev, wol);
+	if (priv->wake_filter_installed)
+		wol->wolopts |= WAKE_FILTER;
 }
 
 static int bcm54xx_phy_set_wol(struct phy_device *phydev,
@@ -891,6 +896,14 @@ static int bcm54xx_phy_set_wol(struct phy_device *phydev,
 		return ret;
 
 	return 0;
+}
+
+static int bcm54xx_phy_set_rxnfc(struct phy_device *phydev,
+				 struct ethtool_rxnfc *cmd)
+{
+	struct bcm54xx_phy_priv *priv = phydev->priv;
+
+	return bcm_phy_set_rxnfc(phydev, cmd, &priv->wake_filter_installed);
 }
 
 static int bcm54xx_phy_probe(struct phy_device *phydev)
@@ -1024,6 +1037,8 @@ static struct phy_driver broadcom_drivers[] = {
 	.resume		= bcm54xx_resume,
 	.get_wol	= bcm54xx_phy_get_wol,
 	.set_wol	= bcm54xx_phy_set_wol,
+	.get_rxnfc	= bcm_phy_get_rxnfc,
+	.set_rxnfc	= bcm54xx_phy_set_rxnfc,
 }, {
 	.phy_id		= PHY_ID_BCM5461,
 	.phy_id_mask	= 0xfffffff0,

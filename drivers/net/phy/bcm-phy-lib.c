@@ -822,7 +822,8 @@ EXPORT_SYMBOL_GPL(bcm_phy_cable_test_get_status_rdb);
 					 WAKE_MCAST | \
 					 WAKE_BCAST | \
 					 WAKE_MAGIC | \
-					 WAKE_MAGICSECURE)
+					 WAKE_MAGICSECURE | \
+					 WAKE_FILTER)
 
 int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
@@ -875,6 +876,12 @@ int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 	ctl &= ~(BCM54XX_WOL_MASK_MODE_MASK << BCM54XX_WOL_MASK_MODE_SHIFT);
 	ctl &= ~BCM54XX_WOL_DIR_PKT_EN;
 	ctl &= ~(BCM54XX_WOL_SECKEY_OPT_MASK << BCM54XX_WOL_SECKEY_OPT_SHIFT);
+
+	/* For WAKE_FILTER, we have already programmed the desired MAC DA
+	 * and associated mask by the time we get there.
+	 */
+	if (wol->wolopts & WAKE_FILTER)
+		goto program_ctl;
 
 	/* When using WAKE_MAGIC, we program the magic pattern filter to match
 	 * the device's MAC address and we accept any MAC DA in the Ethernet
@@ -930,6 +937,7 @@ int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 			return ret;
 	}
 
+program_ctl:
 	if (wol->wolopts & WAKE_MAGICSECURE) {
 		ctl |= BCM54XX_WOL_SECKEY_OPT_6B <<
 		       BCM54XX_WOL_SECKEY_OPT_SHIFT;
@@ -1027,6 +1035,143 @@ void bcm_phy_get_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 	}
 }
 EXPORT_SYMBOL_GPL(bcm_phy_get_wol);
+
+static int bcm_phy_get_rule(struct phy_device *phydev,
+			    struct ethtool_rxnfc *nfc,
+			    int loc)
+{
+	u8 da[ETH_ALEN];
+	unsigned int i;
+	int ret;
+
+	if (loc != 0)
+		return -EINVAL;
+
+	memset(nfc, 0, sizeof(*nfc));
+	nfc->flow_type = ETHER_FLOW;
+	nfc->fs.flow_type = ETHER_FLOW;
+
+	for (i = 0; i < sizeof(da) / 2; i++) {
+		ret = bcm_phy_read_exp(phydev,
+				       BCM54XX_WOL_MPD_DATA2(2 - i));
+		if (ret < 0)
+			return ret;
+
+		da[i * 2] = ret >> 8;
+		da[i * 2 + 1] = ret & 0xff;
+	}
+	ether_addr_copy(nfc->fs.h_u.ether_spec.h_dest, da);
+
+	for (i = 0; i < sizeof(da) / 2; i++) {
+		ret = bcm_phy_read_exp(phydev,
+				       BCM54XX_WOL_MASK(2 - i));
+		if (ret < 0)
+			return ret;
+
+		da[i * 2] = ret >> 8;
+		da[i * 2 + 1] = ret & 0xff;
+	}
+	ether_addr_copy(nfc->fs.m_u.ether_spec.h_dest, da);
+
+	nfc->fs.ring_cookie = RX_CLS_FLOW_WAKE;
+	nfc->fs.location = 0;
+
+	return 0;
+}
+
+static int bcm_phy_set_rule(struct phy_device *phydev,
+			    struct ethtool_rxnfc *nfc)
+{
+	int ret = -EOPNOTSUPP;
+	unsigned int i;
+	const u8 *da;
+
+	/* We support only matching on the MAC DA, reject anything else */
+	if (nfc->fs.ring_cookie != RX_CLS_FLOW_WAKE ||
+	    nfc->fs.location != 0 ||
+	    nfc->fs.flow_type != ETHER_FLOW ||
+	    nfc->fs.h_u.ether_spec.h_proto ||
+	    !is_zero_ether_addr(nfc->fs.h_u.ether_spec.h_source) ||
+	    nfc->fs.m_u.ether_spec.h_proto ||
+	    !is_zero_ether_addr(nfc->fs.m_u.ether_spec.h_source))
+		return ret;
+
+	da = nfc->fs.h_u.ether_spec.h_dest;
+	for (i = 0; i < ETH_ALEN / 2; i++) {
+		ret = bcm_phy_write_exp(phydev,
+				       BCM54XX_WOL_MPD_DATA2(2 - i),
+				       da[i * 2] << 8 | da[i * 2 + 1]);
+		if (ret < 0)
+			return ret;
+	}
+
+	da = nfc->fs.m_u.ether_spec.h_dest;
+	for (i = 0; i < ETH_ALEN / 2; i++) {
+		ret = bcm_phy_write_exp(phydev,
+				        BCM54XX_WOL_MASK(2 - i),
+					da[i * 2] << 8 | da[i * 2 + 1]);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
+int bcm_phy_get_rxnfc(struct phy_device *phydev,
+		      struct ethtool_rxnfc *cmd, u32 *rule_locs)
+{
+	int err = 0;
+
+	switch (cmd->cmd) {
+	case ETHTOOL_GRXCLSRLCNT:
+		cmd->rule_cnt = 1;
+		cmd->data = 1 | RX_CLS_LOC_SPECIAL;
+		break;
+	case ETHTOOL_GRXCLSRULE:
+		err = bcm_phy_get_rule(phydev, cmd, cmd->fs.location);
+		break;
+	case ETHTOOL_GRXCLSRLALL:
+		rule_locs[0] = 0;
+		cmd->rule_cnt = 1;
+		cmd->data = 1;
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(bcm_phy_get_rxnfc);
+
+int bcm_phy_set_rxnfc(struct phy_device *phydev,
+		      struct ethtool_rxnfc *cmd,
+		      bool *installed)
+{
+	int err = 0;
+
+	switch (cmd->cmd) {
+	case ETHTOOL_SRXCLSRLINS:
+		err = bcm_phy_set_rule(phydev, cmd);
+		if (err)
+			return err;
+
+		*installed = true;
+		break;
+	case ETHTOOL_SRXCLSRLDEL:
+		if (cmd->fs.location != 0)
+			return err;
+
+		*installed = false;
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(bcm_phy_set_rxnfc);
 
 MODULE_DESCRIPTION("Broadcom PHY Library");
 MODULE_LICENSE("GPL v2");
