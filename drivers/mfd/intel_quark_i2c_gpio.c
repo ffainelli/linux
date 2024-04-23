@@ -17,6 +17,7 @@
 #include <linux/clk-provider.h>
 #include <linux/dmi.h>
 #include <linux/i2c.h>
+#include <linux/i2c-designware.h>
 #include <linux/property.h>
 
 /* PCI BAR for register base address */
@@ -30,7 +31,7 @@
 #define INTEL_QUARK_IORES_MEM	0
 #define INTEL_QUARK_IORES_IRQ	1
 
-#define INTEL_QUARK_I2C_CONTROLLER_CLK "i2c_designware.0"
+#define INTEL_QUARK_I2C_CONTROLLER_CLK I2C_DESIGNWARE_NAME ".0"
 
 /* The Quark I2C controller source clock */
 #define INTEL_QUARK_I2C_CLK_HZ	33000000
@@ -136,7 +137,7 @@ static const struct software_node *intel_quark_gpio_node_group[] = {
 static struct mfd_cell intel_quark_mfd_cells[] = {
 	[MFD_I2C_BAR] = {
 		.id = MFD_I2C_BAR,
-		.name = "i2c_designware",
+		.name = I2C_DESIGNWARE_NAME,
 		.acpi_match = &intel_quark_acpi_match_i2c,
 		.num_resources = ARRAY_SIZE(intel_quark_i2c_res),
 		.resources = intel_quark_i2c_res,
