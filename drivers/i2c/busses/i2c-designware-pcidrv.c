@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/i2c.h>
+#include <linux/i2c-designware.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -27,7 +28,7 @@
 #include "i2c-designware-core.h"
 #include "i2c-ccgx-ucsi.h"
 
-#define DRIVER_NAME "i2c-designware-pci"
+#define DRIVER_NAME I2C_DESIGNWARE_NAME "-pci"
 
 enum dw_pci_ctl_id_t {
 	medfield,
@@ -425,7 +426,7 @@ static struct pci_driver dw_i2c_driver = {
 module_pci_driver(dw_i2c_driver);
 
 /* Work with hotplug and coldplug */
-MODULE_ALIAS("i2c_designware-pci");
+MODULE_ALIAS(DRIVER_NAME);
 MODULE_AUTHOR("Baruch Siach <baruch@tkos.co.il>");
 MODULE_DESCRIPTION("Synopsys DesignWare PCI I2C bus adapter");
 MODULE_LICENSE("GPL");

@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/i2c.h>
+#include <linux/i2c-designware.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -480,13 +481,13 @@ static const struct dev_pm_ops dw_i2c_dev_pm_ops = {
 };
 
 /* Work with hotplug and coldplug */
-MODULE_ALIAS("platform:i2c_designware");
+MODULE_ALIAS("platform:" I2C_DESIGNWARE_NAME);
 
 static struct platform_driver dw_i2c_driver = {
 	.probe = dw_i2c_plat_probe,
 	.remove_new = dw_i2c_plat_remove,
 	.driver		= {
-		.name	= "i2c_designware",
+		.name	= I2C_DESIGNWARE_NAME,
 		.of_match_table = of_match_ptr(dw_i2c_of_match),
 		.acpi_match_table = ACPI_PTR(dw_i2c_acpi_match),
 		.pm	= pm_ptr(&dw_i2c_dev_pm_ops),
