@@ -19,6 +19,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gfp_types.h>
+#include <linux/i2c-designware.h>
 #include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
@@ -116,7 +117,7 @@ static const struct mfd_cell intel_lpss_idma64_cell = {
 };
 
 static const struct mfd_cell intel_lpss_i2c_cell = {
-	.name = "i2c_designware",
+	.name = I2C_DESIGNWARE_NAME,
 	.num_resources = ARRAY_SIZE(intel_lpss_dev_resources),
 	.resources = intel_lpss_dev_resources,
 };
