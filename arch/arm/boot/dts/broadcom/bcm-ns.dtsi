@@ -121,28 +121,28 @@
 			<0x00007000 12 &gic GIC_SPI 107 IRQ_TYPE_LEVEL_HIGH>,
 
 			/* PCIe Controller 0 */
-			<0x00012000 0 &gic GIC_SPI 126 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00012000 1 &gic GIC_SPI 127 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00012000 2 &gic GIC_SPI 128 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00012000 3 &gic GIC_SPI 129 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00012000 4 &gic GIC_SPI 130 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00012000 5 &gic GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18012000 0 &gic GIC_SPI 126 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18012000 1 &gic GIC_SPI 127 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18012000 2 &gic GIC_SPI 128 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18012000 3 &gic GIC_SPI 129 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18012000 4 &gic GIC_SPI 130 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18012000 5 &gic GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
 
 			/* PCIe Controller 1 */
-			<0x00013000 0 &gic GIC_SPI 132 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00013000 1 &gic GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00013000 2 &gic GIC_SPI 134 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00013000 3 &gic GIC_SPI 135 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00013000 4 &gic GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00013000 5 &gic GIC_SPI 137 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18013000 0 &gic GIC_SPI 132 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18013000 1 &gic GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18013000 2 &gic GIC_SPI 134 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18013000 3 &gic GIC_SPI 135 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18013000 4 &gic GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18013000 5 &gic GIC_SPI 137 IRQ_TYPE_LEVEL_HIGH>,
 
 			/* PCIe Controller 2 */
-			<0x00014000 0 &gic GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00014000 1 &gic GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00014000 2 &gic GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00014000 3 &gic GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00014000 4 &gic GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
-			<0x00014000 5 &gic GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18014000 0 &gic GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18014000 1 &gic GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18014000 2 &gic GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18014000 3 &gic GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18014000 4 &gic GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
+			<0x18014000 5 &gic GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>,
 
 			/* USB 2.0 Controller */
 			<0x00021000 0 &gic GIC_SPI 79 IRQ_TYPE_LEVEL_HIGH>,
@@ -179,27 +179,6 @@
 			#gpio-cells = <2>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
-		};
-
-		pcie0: pcie@12000 {
-			reg = <0x00012000 0x1000>;
-
-			#address-cells = <3>;
-			#size-cells = <2>;
-		};
-
-		pcie1: pcie@13000 {
-			reg = <0x00013000 0x1000>;
-
-			#address-cells = <3>;
-			#size-cells = <2>;
-		};
-
-		pcie2: pcie@14000 {
-			reg = <0x00014000 0x1000>;
-
-			#address-cells = <3>;
-			#size-cells = <2>;
 		};
 
 		usb2: usb2@21000 {
@@ -493,6 +472,28 @@
 	usb3_dmp: syscon@18105000 {
 		reg = <0x18105000 0x1000>;
 	};
+
+	pcie0: pcie@18012000 {
+		reg = <0x18012000 0x1000>;
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+	};
+
+	pcie1: pcie@18013000 {
+		reg = <0x18013000 0x1000>;
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+	};
+
+	pcie2: pcie@18014000 {
+		reg = <0x18014000 0x1000>;
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+	};
+
 
 	thermal-zones {
 		cpu_thermal: cpu-thermal {
