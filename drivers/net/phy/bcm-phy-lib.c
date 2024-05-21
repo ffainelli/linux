@@ -648,10 +648,167 @@ static int __bcm_phy_enable_legacy_access(struct phy_device *phydev)
 				   BCM54XX_ACCESS_MODE_LEGACY_EN);
 }
 
+struct __bcm_phy_regs {
+	u16 reg;
+	u16 val;
+};
+
+/* Load values from an array of registers and then restores those registers back to 0 */
+static int _bcm_phy_load_values(struct phy_device *phydev,
+				struct __bcm_phy_regs *regs,
+				size_t num_regs,
+				u16 page_num)
+{
+	unsigned int i;
+	int ret;
+
+	/* Load the registers into the expansion E* registers */
+	for (i = 0; i < num_regs; i++) {
+		ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER +
+					  regs[i].reg, regs[i].val);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Specificy the number of E* registers to write and the page number */
+	ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xef,
+				  page_num << 14 | GENMASK(num_regs - 1, 0));
+	if (ret < 0)
+		return ret;
+
+	/* Write strobe 1 */
+	ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xcd,
+				  0x1000);
+	if (ret < 0)
+		return ret;
+
+	/* Write strobe 0 */
+	ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xcd, 0);
+	if (ret < 0)
+		return ret;
+
+	/* Restore expansion E* register values */
+	for (i = 0; i < num_regs; i++) {
+		ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER +
+					  regs[i].reg, 0);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* And restore 0xEF register */
+	return __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xef, 0);
+}
+
+static int _bcm_phy_cable_test_init(struct phy_device *phydev)
+{
+	struct __bcm_phy_regs init_regs[] = {
+		{ 0xc7, 0xA01A },
+		{ 0xc8, 0x0300 },
+		{ 0xc9, 0x00EF },
+		{ 0xcb, 0x1304 },
+		{ 0xcc, 0x0180 },
+		{ 0xce, 0x4000 },
+		{ 0xcf, 0x3000 },
+	};
+	struct __bcm_phy_regs page1_init_regs[] = {
+		/* Page 1 */
+		{ 0xe0, 0x0119 },
+		{ 0xe1, 0x0202 },
+		{ 0xe2, 0x000F },
+		{ 0xe3, 0x5000 },
+		{ 0xe4, 0x738E },
+		{ 0xe5, 0x1000 },
+		{ 0xe6, 0x1000 },
+		{ 0xe7, 0xAA00 },
+	};
+	struct __bcm_phy_regs page2_init_regs[] = {
+		/* page 2 */
+		{ 0xe0, 0x0B00 },
+		{ 0xe1, 0x313D },
+		{ 0xe2, 0x007C },
+	};
+	struct __bcm_phy_regs page0_init_regs[] = {
+		/* page 0 */
+		{ 0xe0, 0x0001 },
+		{ 0xe1, 0x0540 },
+		{ 0xe2, 0x0E40 },
+		{ 0xe3, 0x0841 },
+		{ 0xe4, 0x1344 },
+		{ 0xe8, 0x8760 },
+		{ 0xe9, 0x4B33 },
+		{ 0xea, 0x0400 },
+	};
+	unsigned int i;
+	int ret;
+
+	ret = genphy_soft_reset(phydev);
+	if (ret < 0)
+		return ret;
+
+	phy_lock_mdio_bus(phydev);
+
+	/* Disable ECD to load parameters */
+	ret = __bcm_phy_write_exp(phydev, BCM54XX_EXP_ECD_CTRL, 0);
+	if (ret < 0)
+		goto out;
+
+	/* Prepare for loading value */
+	for (i = 0; i < ARRAY_SIZE(init_regs); i++) {
+		ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER +
+					  init_regs[i].reg,
+					  init_regs[i].val);
+		if (ret < 0)
+			goto out;
+	}
+
+	/* Load page 1 values */
+	ret = _bcm_phy_load_values(phydev, page1_init_regs,
+				   ARRAY_SIZE(page1_init_regs), 1);
+	if (ret < 0)
+		goto out;
+
+	/* Load page 2 values */
+	ret = _bcm_phy_load_values(phydev, page2_init_regs,
+				   ARRAY_SIZE(page2_init_regs), 2);
+	if (ret < 0)
+		goto out;
+
+	/* Load the page 0 values */
+	for (i = 0; i < ARRAY_SIZE(page0_init_regs); i++) {
+		ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER +
+					  page0_init_regs[i].reg,
+					  page0_init_regs[i].val);
+		if (ret < 0)
+			goto out;
+	}
+
+	/* Finish loading */
+	ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xcd, 0xd0);
+	if (ret < 0)
+		goto out;
+
+	/* Dummy read to flush the ECD register */
+	ret = __bcm_phy_read_exp(phydev, BCM54XX_EXP_ECD_CTRL);
+	if (ret < 0)
+		goto out;
+
+	ret = __bcm_phy_write_exp(phydev, BCM54XX_EXP_ECD_CTRL, 0);
+	if (ret < 0)
+		goto out;
+
+out:
+	phy_unlock_mdio_bus(phydev);
+	return ret;
+}
+
 static int _bcm_phy_cable_test_start(struct phy_device *phydev, bool is_rdb)
 {
 	u16 mask, set;
 	int ret;
+
+	ret = _bcm_phy_cable_test_init(phydev);
+	if (ret < 0)
+		return ret;
 
 	/* Auto-negotiation must be enabled for cable diagnostics to work, but
 	 * don't advertise any capabilities.
