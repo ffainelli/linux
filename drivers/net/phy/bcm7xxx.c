@@ -856,7 +856,8 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.phy_id_mask	= 0xfffffff0,					\
 	.name		= _name,					\
 	/* PHY_GBIT_FEATURES */						\
-	.flags		= PHY_IS_INTERNAL,				\
+	.flags		= PHY_IS_INTERNAL |				\
+			  PHY_POLL_CABLE_TEST,				\
 	.config_init	= bcm7xxx_28nm_config_init,			\
 	.resume		= bcm7xxx_28nm_resume,				\
 	.suspend	= bcm7xxx_28nm_suspend,				\
@@ -866,6 +867,8 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.get_strings	= bcm_phy_get_strings,				\
 	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
 	.probe		= bcm7xxx_28nm_probe,				\
+	.cable_test_start = bcm_phy_cable_test_start,			\
+	.cable_test_get_status = bcm_phy_cable_test_get_status,		\
 }
 
 #define BCM7XXX_28NM_EPHY(_oui, _name)					\
@@ -905,7 +908,8 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.phy_id_mask	= 0xfffffff0,					\
 	.name		= _name,					\
 	/* PHY_BASIC_FEATURES */					\
-	.flags		= PHY_IS_INTERNAL,				\
+	.flags		= PHY_IS_INTERNAL | 				\
+			  PHY_POLL_CABLE_TEST,				\
 	.get_sset_count	= bcm_phy_get_sset_count,			\
 	.get_strings	= bcm_phy_get_strings,				\
 	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
@@ -915,6 +919,8 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.read_status	= genphy_read_status,				\
 	.resume		= bcm7xxx_16nm_ephy_resume,			\
 	.suspend	= bcm7xxx_28nm_suspend,				\
+	.cable_test_start = bcm_phy_cable_test_start,			\
+	.cable_test_get_status = bcm_phy_cable_test_get_status,		\
 }
 
 static struct phy_driver bcm7xxx_driver[] = {
