@@ -20336,6 +20336,7 @@ S:	Maintained
 F:	Documentation/filesystems/proc.rst
 F:	fs/proc/
 F:	include/linux/proc_fs.h
+F:	scripts/gdb/linux/proc.py
 F:	tools/testing/selftests/proc/
 
 PROC SYSCTL
