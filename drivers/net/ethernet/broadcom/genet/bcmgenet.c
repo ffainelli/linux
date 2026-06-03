@@ -1903,8 +1903,9 @@ static struct sk_buff *bcmgenet_free_rx_cb(struct device *dev,
 	cb->skb = NULL;
 
 	if (dma_unmap_addr(cb, dma_addr)) {
-		dma_unmap_single(dev, dma_unmap_addr(cb, dma_addr),
-				 dma_unmap_len(cb, dma_len), DMA_FROM_DEVICE);
+		skb_set_rx_dma(skb, dev,
+			       dma_unmap_addr(cb, dma_addr),
+			       dma_unmap_len(cb, dma_len));
 		dma_unmap_addr_set(cb, dma_addr, 0);
 	}
 
@@ -2350,7 +2351,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 			goto next;
 		}
 
-		status = (struct status_64 *)skb->data;
+		status = skb_read_data(skb, 0, sizeof(*status));
 		dma_length_status = status->length_status;
 		if (dev->features & NETIF_F_RXCSUM) {
 			rx_csum = (__force __be16)(status->rx_csum & 0xffff);
@@ -2374,6 +2375,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 		if (unlikely(len > RX_BUF_LENGTH)) {
 			netif_err(priv, rx_status, dev, "oversized packet\n");
 			BCMGENET_STATS64_INC(stats, length_errors);
+			skb_rx_dma_done(skb);
 			dev_kfree_skb_any(skb);
 			goto next;
 		}
@@ -2382,6 +2384,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 			netif_err(priv, rx_status, dev,
 				  "dropping fragmented packet!\n");
 			BCMGENET_STATS64_INC(stats, fragmented_errors);
+			skb_rx_dma_done(skb);
 			dev_kfree_skb_any(skb);
 			goto next;
 		}
@@ -2410,6 +2413,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 						DMA_RX_RXER)) == DMA_RX_RXER)
 				u64_stats_inc(&stats->errors);
 			u64_stats_update_end(&stats->syncp);
+			skb_rx_dma_done(skb);
 			dev_kfree_skb_any(skb);
 			goto next;
 		} /* error packet */

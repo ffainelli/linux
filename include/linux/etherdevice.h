@@ -639,7 +639,14 @@ static inline void eth_skb_pkt_type(struct sk_buff *skb,
 
 static inline struct ethhdr *eth_skb_pull_mac(struct sk_buff *skb)
 {
-	struct ethhdr *eth = (struct ethhdr *)skb->data;
+	/*
+	 * eth_type_trans() calls skb_reset_mac_header() before this, so
+	 * mac_header == data - head and eth_hdr() is numerically identical
+	 * to (struct ethhdr *)skb->data.  Using eth_hdr() routes through
+	 * skb_mac_header(), which triggers incremental DMA cache sync when
+	 * NET_SKB_RX_DMA_SYNC is enabled.
+	 */
+	struct ethhdr *eth = eth_hdr(skb);
 
 	skb_pull_inline(skb, ETH_HLEN);
 	return eth;

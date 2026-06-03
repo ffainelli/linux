@@ -1079,6 +1079,13 @@ static void skb_free_head(struct sk_buff *skb)
 {
 	unsigned char *head = skb->head;
 
+	/* Release any pending incremental RX DMA mapping without re-syncing
+	 * the full buffer; all needed bytes were already synced on demand.
+	 * This fires exactly once because skb_free_head() is only reached when
+	 * skb_shinfo()->dataref has dropped to zero.
+	 */
+	skb_rx_dma_done(skb);
+
 	if (skb->head_frag) {
 		if (skb_pp_recycle(skb, head))
 			return;

@@ -400,7 +400,7 @@ static int __skb_datagram_iter(const struct sk_buff *skb, int offset,
 		if (copy > len)
 			copy = len;
 		n = INDIRECT_CALL_1(cb, simple_copy_to_iter,
-				    skb->data + offset, copy, data, to);
+				    skb_read_data(skb, offset, copy), copy, data, to);
 		offset += n;
 		if (n != copy)
 			goto short_copy;

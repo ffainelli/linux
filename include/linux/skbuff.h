@@ -609,6 +609,13 @@ struct skb_shared_info {
 	/*
 	 * Warning : all fields before dataref are cleared in __alloc_skb()
 	 */
+#ifdef CONFIG_NET_SKB_RX_DMA_SYNC
+	/* Incremental RX cache invalidation state (shared across clones). */
+	dma_addr_t	rx_dma_addr;	/* DMA addr of skb->head; 0 = not mapped */
+	struct device	*rx_dma_dev;
+	u32		rx_dma_len;	/* total mapped length */
+	atomic_t	rx_dma_synced;	/* bytes already CPU-visible; cache-line aligned */
+#endif
 	atomic_t	dataref;
 
 	union {
@@ -2994,6 +3001,110 @@ static inline void skb_reset_inner_headers(struct sk_buff *skb)
 	skb->inner_transport_header = skb->transport_header;
 }
 
+/**
+ * skb_set_rx_dma - mark an RX SKB buffer as DMA-mapped for lazy cache sync
+ * @skb:  the receive buffer
+ * @dev:  DMA device that owns the mapping
+ * @addr: DMA address of skb->head
+ * @len:  total mapped length (e.g. 2 KB rx_buf_len)
+ *
+ * Call instead of dma_unmap_single() when handing the buffer off after
+ * reception.  The mapping is kept alive and released lazily as each layer
+ * reads its slice; the final release happens in skb_free_head().
+ */
+static inline void skb_set_rx_dma(struct sk_buff *skb, struct device *dev,
+				   dma_addr_t addr, u32 len)
+{
+#ifdef CONFIG_NET_SKB_RX_DMA_SYNC
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+
+	shinfo->rx_dma_dev    = dev;
+	shinfo->rx_dma_addr   = addr;
+	shinfo->rx_dma_len    = len;
+	atomic_set(&shinfo->rx_dma_synced, 0);
+#endif
+}
+
+/**
+ * skb_rx_dma_sync_at - ensure a range of the DMA-mapped RX buffer is CPU-visible
+ * @skb:         the receive buffer (original or any clone)
+ * @head_offset: byte offset from skb->head to the start of the region
+ * @size:        number of bytes to make visible
+ *
+ * Advances the shared rx_dma_synced cursor in cache-line increments.
+ * Repeated calls for already-synced ranges are cheap no-ops.
+ * No-op when rx_dma_addr is 0 (non-mapped SKB or coherent platform).
+ */
+static inline void skb_rx_dma_sync_at(const struct sk_buff *skb,
+				       unsigned int head_offset,
+				       unsigned int size)
+{
+#ifdef CONFIG_NET_SKB_RX_DMA_SYNC
+	/* skb_shinfo() returns non-const even through a const skb pointer. */
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+	unsigned int need, old;
+
+	if (!shinfo->rx_dma_addr)
+		return;
+
+	need = ALIGN(head_offset + size, L1_CACHE_BYTES);
+	old  = atomic_read(&shinfo->rx_dma_synced);
+	if (need <= old)
+		return;
+
+	/*
+	 * The CAS winner performs the actual cache invalidation; any racing
+	 * caller will find need <= old on retry because dma_sync issues the
+	 * required memory barrier.
+	 */
+	if (atomic_cmpxchg(&shinfo->rx_dma_synced, old, need) == old)
+		dma_sync_single_for_cpu(shinfo->rx_dma_dev,
+					shinfo->rx_dma_addr + old,
+					need - old, DMA_FROM_DEVICE);
+#endif
+}
+
+/**
+ * skb_read_data - sync and return a pointer into the DMA-mapped RX payload
+ * @skb:    the receive buffer
+ * @offset: byte offset from skb->data
+ * @size:   number of bytes to read
+ *
+ * Drop-in replacement for @skb->data + @offset on DMA-mapped RX buffers.
+ * Ensures the range [@offset, @offset+@size) is CPU-visible before returning.
+ */
+static inline void *skb_read_data(const struct sk_buff *skb,
+				   unsigned int offset, unsigned int size)
+{
+	skb_rx_dma_sync_at(skb, (skb->data - skb->head) + offset, size);
+	return skb->data + offset;
+}
+
+/**
+ * skb_rx_dma_done - release the DMA mapping without re-syncing the buffer
+ * @skb: the receive buffer
+ *
+ * Use on drop paths where no bytes beyond those already synced need to be
+ * seen by the CPU, and as the final cleanup hook in skb_free_head().
+ * DMA_ATTR_SKIP_CPU_SYNC avoids a redundant full-buffer cache flush since
+ * every needed byte was already explicitly synced via skb_rx_dma_sync_at().
+ */
+static inline void skb_rx_dma_done(struct sk_buff *skb)
+{
+#ifdef CONFIG_NET_SKB_RX_DMA_SYNC
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+
+	if (shinfo->rx_dma_addr) {
+		dma_unmap_single_attrs(shinfo->rx_dma_dev,
+				       shinfo->rx_dma_addr,
+				       shinfo->rx_dma_len,
+				       DMA_FROM_DEVICE,
+				       DMA_ATTR_SKIP_CPU_SYNC);
+		shinfo->rx_dma_addr = 0;
+	}
+#endif
+}
+
 static inline int skb_mac_header_was_set(const struct sk_buff *skb)
 {
 	return skb->mac_header != (typeof(skb->mac_header))~0U;
@@ -3087,6 +3198,7 @@ static inline bool skb_transport_header_was_set(const struct sk_buff *skb)
 static inline unsigned char *skb_transport_header(const struct sk_buff *skb)
 {
 	DEBUG_NET_WARN_ON_ONCE(!skb_transport_header_was_set(skb));
+	skb_rx_dma_sync_at(skb, skb->transport_header, 60);
 	return skb->head + skb->transport_header;
 }
 
@@ -3130,6 +3242,7 @@ static inline void skb_set_transport_header(struct sk_buff *skb,
 
 static inline unsigned char *skb_network_header(const struct sk_buff *skb)
 {
+	skb_rx_dma_sync_at(skb, skb->network_header, 60);
 	return skb->head + skb->network_header;
 }
 
@@ -3150,6 +3263,7 @@ static inline void skb_set_network_header(struct sk_buff *skb, const int offset)
 static inline unsigned char *skb_mac_header(const struct sk_buff *skb)
 {
 	DEBUG_NET_WARN_ON_ONCE(!skb_mac_header_was_set(skb));
+	skb_rx_dma_sync_at(skb, skb->mac_header, ETH_HLEN + 4 /* VLAN_HLEN */);
 	return skb->head + skb->mac_header;
 }
 

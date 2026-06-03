@@ -66,6 +66,14 @@ config SKB_DECRYPTED
 config SKB_EXTENSIONS
 	bool
 
+config NET_SKB_RX_DMA_SYNC
+	bool "Incremental DMA cache sync for RX SKBs"
+	depends on HAS_DMA
+	help
+	  Defers cache invalidation of DMA-mapped RX buffers until each byte
+	  is first consumed, instead of invalidating the entire buffer on
+	  packet reception. Drivers must opt in by calling skb_set_rx_dma().
+
 config NET_DEVMEM
 	def_bool y
 	select GENERIC_ALLOCATOR
