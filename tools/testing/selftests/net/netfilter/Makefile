@@ -9,6 +9,7 @@ MNL_LDLIBS := $(shell $(HOSTPKG_CONFIG) --libs libmnl 2>/dev/null || echo -lmnl)
 TEST_PROGS := \
 	br_netfilter.sh \
 	br_netfilter_queue.sh \
+	br_netfilter_shared.sh \
 	bridge_brouter.sh \
 	conntrack_clash.sh \
 	conntrack_dump_flush.sh \
