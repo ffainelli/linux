@@ -1626,6 +1626,17 @@ static void b53_phylink_mac_config(struct phylink_config *config,
 	}
 }
 
+static bool b53_phylink_mac_needs_override(struct b53_device *dev, int port,
+					   unsigned int mode,
+					   phy_interface_t interface)
+{
+	return mode == MLO_AN_FIXED ||
+	       interface == PHY_INTERFACE_MODE_SGMII ||
+	       interface == PHY_INTERFACE_MODE_1000BASEX ||
+	       (mode == MLO_AN_PHY && is63xx(dev) &&
+		in_range(port, B53_63XX_RGMII0, 4));
+}
+
 static void b53_phylink_mac_link_down(struct phylink_config *config,
 				      unsigned int mode,
 				      phy_interface_t interface)
@@ -1634,16 +1645,8 @@ static void b53_phylink_mac_link_down(struct phylink_config *config,
 	struct b53_device *dev = dp->ds->priv;
 	int port = dp->index;
 
-	if (mode == MLO_AN_PHY) {
-		if (is63xx(dev) && in_range(port, B53_63XX_RGMII0, 4))
-			b53_force_link(dev, port, false);
-		return;
-	}
-
-	if (mode == MLO_AN_FIXED) {
+	if (b53_phylink_mac_needs_override(dev, port, mode, interface))
 		b53_force_link(dev, port, false);
-		return;
-	}
 }
 
 static void b53_phylink_mac_link_up(struct phylink_config *config,
@@ -1659,31 +1662,23 @@ static void b53_phylink_mac_link_up(struct phylink_config *config,
 	struct ethtool_keee *p = &dev->ports[dp->index].eee;
 	int port = dp->index;
 
-	if (mode == MLO_AN_PHY) {
-		/* Re-negotiate EEE if it was enabled already */
+	/* Re-negotiate EEE if it was enabled already */
+	if (mode == MLO_AN_PHY)
 		p->eee_enabled = b53_eee_init(ds, port, phydev);
 
-		if (is63xx(dev) && in_range(port, B53_63XX_RGMII0, 4)) {
-			if (b53_force_port_config(dev, port, speed, duplex,
-						  tx_pause, rx_pause))
-				return;
-			b53_force_link(dev, port, true);
-		}
-
+	if (!b53_phylink_mac_needs_override(dev, port, mode, interface))
 		return;
+
+	/* Force flow control on BCM5301x's CPU port */
+	if (mode == MLO_AN_FIXED && is5301x(dev) && dsa_is_cpu_port(ds, port)) {
+		tx_pause = true;
+		rx_pause = true;
 	}
 
-	if (mode == MLO_AN_FIXED) {
-		/* Force flow control on BCM5301x's CPU port */
-		if (is5301x(dev) && dsa_is_cpu_port(ds, port))
-			tx_pause = rx_pause = true;
-
-		if (b53_force_port_config(dev, port, speed, duplex,
-					  tx_pause, rx_pause))
-			return;
-		b53_force_link(dev, port, true);
+	/* PCS negotiation supplies state; the MAC applies phylink's policy. */
+	if (b53_force_port_config(dev, port, speed, duplex, tx_pause, rx_pause))
 		return;
-	}
+	b53_force_link(dev, port, true);
 }
 
 int b53_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
