@@ -493,7 +493,6 @@ static const struct b53_io_ops b53_srab_ops = {
 #if IS_ENABLED(CONFIG_B53_SERDES)
 	.phylink_mac_select_pcs = b53_serdes_phylink_mac_select_pcs,
 	.serdes_map_lane = b53_srab_serdes_map_lane,
-	.serdes_link_set = b53_serdes_link_set,
 #endif
 };
 

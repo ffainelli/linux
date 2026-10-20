@@ -107,8 +107,6 @@ static inline u8 b53_serdes_map_lane(struct b53_device *dev, int port)
 	return dev->ops->serdes_map_lane(dev, port);
 }
 
-void b53_serdes_link_set(struct b53_device *dev, int port, unsigned int mode,
-			 phy_interface_t interface, bool link_up);
 struct phylink_pcs *b53_serdes_phylink_mac_select_pcs(struct b53_device *dev,
 						      int port,
 						      phy_interface_t interface);
