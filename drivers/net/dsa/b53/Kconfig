@@ -47,3 +47,13 @@ config B53_SERDES
 	default ARCH_BCM_NSP
 	help
 	  Select to enable support for SerDes on e.g: Northstar Plus SoCs.
+
+config B53_SERDES_KUNIT_TEST
+	tristate "KUnit tests for the B53 SerDes PCS" if !KUNIT_ALL_TESTS
+	depends on KUNIT && B53_SERDES
+	default KUNIT_ALL_TESTS
+	help
+	  Exercise PCS negotiation, state decoding, power management and
+	  register error handling with a fake banked switch register bus.
+	  Includes injected bus errors and concurrent access to both lanes.
+	  These tests run without switch hardware.
