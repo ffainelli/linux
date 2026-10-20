@@ -259,6 +259,7 @@ static int b53_serdes_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 	if (ret < 0)
 		return ret;
 
+	WRITE_ONCE(priv->neg_mode, neg_mode);
 	return changed | ret;
 }
 
@@ -290,50 +291,48 @@ static void b53_serdes_link_up(struct phylink_pcs *pcs, unsigned int neg_mode,
 static void b53_serdes_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
 				 struct phylink_link_state *state)
 {
-	struct b53_device *dev = pcs_to_b53_pcs(pcs)->dev;
-	u8 lane = pcs_to_b53_pcs(pcs)->lane;
-	int dig, bmsr;
-
-	dig = b53_serdes_read(dev, lane, B53_SERDES_DIGITAL_STATUS,
-			      SERDES_DIGITAL_BLK);
-	if (dig < 0) {
-		state->link = false;
-		b53_serdes_error(dev, lane, dig);
-		return;
-	}
+	struct b53_pcs *priv = pcs_to_b53_pcs(pcs);
+	struct b53_device *dev = priv->dev;
+	u8 lane = priv->lane;
+	int bmsr, lpa;
 
 	bmsr = b53_serdes_read(dev, lane, B53_SERDES_MII_REG(MII_BMSR),
 			       SERDES_MII_BLK);
-	if (bmsr < 0) {
-		state->link = false;
-		b53_serdes_error(dev, lane, bmsr);
-		return;
-	}
+	if (bmsr < 0)
+		goto error;
 
-	switch ((dig >> SPEED_STATUS_SHIFT) & SPEED_STATUS_MASK) {
-	case SPEED_STATUS_10:
-		state->speed = SPEED_10;
-		break;
-	case SPEED_STATUS_100:
-		state->speed = SPEED_100;
-		break;
-	case SPEED_STATUS_1000:
-		state->speed = SPEED_1000;
-		break;
-	default:
-	case SPEED_STATUS_2500:
-		state->speed = SPEED_2500;
-		break;
-	}
+	lpa = b53_serdes_read(dev, lane, B53_SERDES_MII_REG(MII_LPA),
+			      SERDES_MII_BLK);
+	if (lpa < 0)
+		goto error;
 
-	state->duplex = dig & DUPLEX_STATUS ? DUPLEX_FULL : DUPLEX_HALF;
-	state->an_complete = !!(bmsr & BMSR_ANEGCOMPLETE);
-	state->link = !!(dig & LINK_STATUS);
-	if (dig & PAUSE_RESOLUTION_RX_SIDE)
-		state->pause |= MLO_PAUSE_RX;
-	if (dig & PAUSE_RESOLUTION_TX_SIDE)
-		state->pause |= MLO_PAUSE_TX;
+	phylink_mii_c22_pcs_decode_state(state, neg_mode, bmsr, lpa);
+	return;
+error:
+	state->link = false;
+	state->an_complete = false;
+	b53_serdes_error(dev, lane, bmsr < 0 ? bmsr : lpa);
 }
+
+void b53_serdes_link_change(struct b53_device *dev, int port)
+{
+	u8 lane = b53_serdes_map_lane(dev, port);
+	int dig;
+
+	if (lane >= B53_N_PCS || !dev->pcs[lane].dev)
+		return;
+
+	/* Fixed links and PHY links do not take their state from the PCS. */
+	if (!(READ_ONCE(dev->pcs[lane].neg_mode) & PHYLINK_PCS_NEG_INBAND))
+		return;
+
+	/* Use the live PCS status, not latched BMSR or MAC override status. */
+	dig = b53_serdes_read(dev, lane, B53_SERDES_DIGITAL_STATUS,
+			      SERDES_DIGITAL_BLK);
+	b53_serdes_error(dev, lane, dig);
+	phylink_pcs_change(&dev->pcs[lane].pcs, dig < 0 || (dig & LINK_STATUS));
+}
+EXPORT_SYMBOL(b53_serdes_link_change);
 
 static int b53_serdes_enable(struct phylink_pcs *pcs)
 {
@@ -440,6 +439,8 @@ int b53_serdes_init(struct b53_device *dev, int port)
 	pcs->dev = dev;
 	pcs->lane = lane;
 	pcs->pcs.ops = &b53_pcs_ops;
+	/* Port interrupts are optional and may precede AN completion. */
+	pcs->pcs.poll = true;
 	__set_bit(PHY_INTERFACE_MODE_SGMII, pcs->pcs.supported_interfaces);
 	__set_bit(PHY_INTERFACE_MODE_1000BASEX, pcs->pcs.supported_interfaces);
 

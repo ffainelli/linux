@@ -108,6 +108,7 @@ enum b53_variant_id {
 struct b53_pcs {
 	struct phylink_pcs pcs;
 	struct b53_device *dev;
+	unsigned int neg_mode;
 	u8 lane;
 };
 
@@ -521,7 +522,6 @@ int b53_br_flags(struct dsa_switch *ds, int port,
 		 struct switchdev_brport_flags flags,
 		 struct netlink_ext_ack *extack);
 int b53_setup_devlink_resources(struct dsa_switch *ds);
-void b53_port_event(struct dsa_switch *ds, int port);
 int b53_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
 		       struct netlink_ext_ack *extack);
 int b53_vlan_add(struct dsa_switch *ds, int port,

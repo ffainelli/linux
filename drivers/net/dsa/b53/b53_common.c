@@ -1548,18 +1548,6 @@ static void b53_adjust_5325_mii(struct dsa_switch *ds, int port)
 	}
 }
 
-void b53_port_event(struct dsa_switch *ds, int port)
-{
-	struct b53_device *dev = ds->priv;
-	bool link;
-	u16 sts;
-
-	b53_read16(dev, B53_STAT_PAGE, B53_LINK_STAT, &sts);
-	link = !!(sts & BIT(port));
-	dsa_port_phylink_mac_change(ds, port, link);
-}
-EXPORT_SYMBOL(b53_port_event);
-
 static void b53_phylink_get_caps(struct dsa_switch *ds, int port,
 				 struct phylink_config *config)
 {
