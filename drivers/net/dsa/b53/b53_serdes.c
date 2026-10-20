@@ -107,6 +107,39 @@ static int b53_serdes_read(struct b53_device *dev, u8 lane,
 	return ret;
 }
 
+/* Return one if the register changed, zero if unchanged, or an error. */
+static int b53_serdes_modify(struct b53_device *dev, u8 lane, u8 offset,
+			     u16 block, u16 mask, u16 set)
+{
+	int ret, old;
+	u16 new;
+
+	mutex_lock(&dev->reg_mutex);
+	ret = b53_serdes_set_lane(dev, lane);
+	if (ret)
+		goto out;
+
+	old = b53_serdes_read_blk(dev, offset, block);
+	if (old < 0) {
+		ret = old;
+		goto out;
+	}
+
+	new = (old & ~mask) | set;
+	if (new == old)
+		goto out;
+
+	ret = b53_serdes_write_blk(dev, offset, block, new);
+	if (!ret)
+		ret = 1;
+out:
+	if (ret < 0)
+		dev->serdes_lane = B53_INVALID_LANE;
+	mutex_unlock(&dev->reg_mutex);
+
+	return ret;
+}
+
 static void b53_serdes_error(struct b53_device *dev, u8 lane, int ret)
 {
 	if (ret < 0)
@@ -202,32 +235,32 @@ static void b53_serdes_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
 		state->pause |= MLO_PAUSE_TX;
 }
 
-void b53_serdes_link_set(struct b53_device *dev, int port, unsigned int mode,
-			 phy_interface_t interface, bool link_up)
+static int b53_serdes_enable(struct phylink_pcs *pcs)
 {
-	u8 lane = b53_serdes_map_lane(dev, port);
-	int reg;
+	struct b53_pcs *priv = pcs_to_b53_pcs(pcs);
+	int ret;
 
-	if (lane == B53_INVALID_LANE)
-		return;
-
-	reg = b53_serdes_read(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
-			      SERDES_MII_BLK);
-	if (reg < 0)
-		goto out;
-
-	if (link_up)
-		reg &= ~BMCR_PDOWN;
-	else
-		reg |= BMCR_PDOWN;
-	reg = b53_serdes_write(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
-			       SERDES_MII_BLK, reg);
-out:
-	b53_serdes_error(dev, lane, reg);
+	ret = b53_serdes_modify(priv->dev, priv->lane,
+				B53_SERDES_MII_REG(MII_BMCR), SERDES_MII_BLK,
+				BMCR_PDOWN, 0);
+	b53_serdes_error(priv->dev, priv->lane, ret);
+	return ret < 0 ? ret : 0;
 }
-EXPORT_SYMBOL(b53_serdes_link_set);
+
+static void b53_serdes_disable(struct phylink_pcs *pcs)
+{
+	struct b53_pcs *priv = pcs_to_b53_pcs(pcs);
+	int ret;
+
+	ret = b53_serdes_modify(priv->dev, priv->lane,
+				B53_SERDES_MII_REG(MII_BMCR), SERDES_MII_BLK,
+				BMCR_PDOWN, BMCR_PDOWN);
+	b53_serdes_error(priv->dev, priv->lane, ret);
+}
 
 static const struct phylink_pcs_ops b53_pcs_ops = {
+	.pcs_enable = b53_serdes_enable,
+	.pcs_disable = b53_serdes_disable,
 	.pcs_get_state = b53_serdes_get_state,
 	.pcs_config = b53_serdes_config,
 	.pcs_an_restart = b53_serdes_an_restart,

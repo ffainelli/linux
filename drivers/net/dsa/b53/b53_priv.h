@@ -54,9 +54,6 @@ struct b53_io_ops {
 						      int port,
 						      phy_interface_t interface);
 	u8 (*serdes_map_lane)(struct b53_device *dev, int port);
-	void (*serdes_link_set)(struct b53_device *dev, int port,
-				unsigned int mode, phy_interface_t interface,
-				bool link_up);
 };
 
 struct b53_arl_entry;

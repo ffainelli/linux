@@ -1656,10 +1656,6 @@ static void b53_phylink_mac_link_down(struct phylink_config *config,
 		b53_force_link(dev, port, false);
 		return;
 	}
-
-	if (phy_interface_mode_is_8023z(interface) &&
-	    dev->ops->serdes_link_set)
-		dev->ops->serdes_link_set(dev, port, mode, interface, false);
 }
 
 static void b53_phylink_mac_link_up(struct phylink_config *config,
@@ -1700,10 +1696,6 @@ static void b53_phylink_mac_link_up(struct phylink_config *config,
 		b53_force_link(dev, port, true);
 		return;
 	}
-
-	if (phy_interface_mode_is_8023z(interface) &&
-	    dev->ops->serdes_link_set)
-		dev->ops->serdes_link_set(dev, port, mode, interface, true);
 }
 
 int b53_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
