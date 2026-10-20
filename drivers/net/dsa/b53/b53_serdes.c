@@ -274,24 +274,11 @@ void b53_serdes_phylink_get_caps(struct b53_device *dev, int port,
 	if (lane == B53_INVALID_LANE)
 		return;
 
-	switch (lane) {
-	case 0:
-		/* It appears lane 0 supports 2500base-X and 1000base-X */
-		__set_bit(PHY_INTERFACE_MODE_2500BASEX,
-			  config->supported_interfaces);
-		config->mac_capabilities |= MAC_2500FD;
-		fallthrough;
-	case 1:
-		/* It appears lane 1 only supports 1000base-X and SGMII */
-		__set_bit(PHY_INTERFACE_MODE_1000BASEX,
-			  config->supported_interfaces);
-		__set_bit(PHY_INTERFACE_MODE_SGMII,
-			  config->supported_interfaces);
-		config->mac_capabilities |= MAC_1000FD;
-		break;
-	default:
-		break;
-	}
+	if (lane >= B53_N_PCS || !dev->pcs[lane].dev)
+		return;
+
+	phy_interface_copy(config->supported_interfaces,
+			   dev->pcs[lane].pcs.supported_interfaces);
 }
 EXPORT_SYMBOL(b53_serdes_phylink_get_caps);
 
@@ -305,8 +292,7 @@ struct phylink_pcs *b53_serdes_phylink_mac_select_pcs(struct b53_device *dev,
 	    !dev->pcs[lane].dev)
 		return NULL;
 
-	if (!phy_interface_mode_is_8023z(interface) &&
-	    interface != PHY_INTERFACE_MODE_SGMII)
+	if (!test_bit(interface, dev->pcs[lane].pcs.supported_interfaces))
 		return NULL;
 
 	return &dev->pcs[lane].pcs;
@@ -352,6 +338,8 @@ int b53_serdes_init(struct b53_device *dev, int port)
 	pcs->dev = dev;
 	pcs->lane = lane;
 	pcs->pcs.ops = &b53_pcs_ops;
+	__set_bit(PHY_INTERFACE_MODE_SGMII, pcs->pcs.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_1000BASEX, pcs->pcs.supported_interfaces);
 
 	return 0;
 }
