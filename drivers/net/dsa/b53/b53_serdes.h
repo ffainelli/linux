@@ -22,6 +22,11 @@
 #define B53_SERDES_MII_REG(x)		(0x20 + (x) * 2)
 #define B53_SERDES_DIGITAL_CONTROL(x)	(0x1e + (x) * 2)
 #define B53_SERDES_DIGITAL_STATUS	0x28
+#define B53_SERDES_DIGITAL_MISC1		0x30
+#define  FORCE_SPEED_MASK		GENMASK(4, 0)
+
+#define B53_SERDES_RX_CONTROL		0x22
+#define  RX_SEQ_START			BIT(15)
 
 /* SERDES_DIGITAL_CONTROL1 */
 #define  FIBER_MODE_1000X		BIT(0)
@@ -92,6 +97,7 @@
 #define  TXFIFO_ERR_DET			BIT(15)
 
 /* Block offsets */
+#define SERDES_RX_BLK			0x80b0
 #define SERDES_DIGITAL_BLK		0x8300
 #define SERDES_ID0			0x8310
 #define SERDES_MII_BLK			0xffe0

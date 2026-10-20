@@ -75,22 +75,6 @@ static int b53_serdes_set_lane(struct b53_device *dev, u8 lane)
 	return 0;
 }
 
-static int b53_serdes_write(struct b53_device *dev, u8 lane,
-			    u8 offset, u16 block, u16 value)
-{
-	int ret;
-
-	mutex_lock(&dev->reg_mutex);
-	ret = b53_serdes_set_lane(dev, lane);
-	if (!ret)
-		ret = b53_serdes_write_blk(dev, offset, block, value);
-	if (ret)
-		dev->serdes_lane = B53_INVALID_LANE;
-	mutex_unlock(&dev->reg_mutex);
-
-	return ret;
-}
-
 static int b53_serdes_read(struct b53_device *dev, u8 lane,
 			   u8 offset, u16 block)
 {
@@ -147,44 +131,160 @@ static void b53_serdes_error(struct b53_device *dev, u8 lane, int ret)
 				    lane, ERR_PTR(ret));
 }
 
+static unsigned int b53_serdes_inband_caps(struct phylink_pcs *pcs,
+					   phy_interface_t interface)
+{
+	switch (interface) {
+	case PHY_INTERFACE_MODE_SGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
+		return LINK_INBAND_DISABLE | LINK_INBAND_ENABLE;
+	default:
+		return 0;
+	}
+}
+
+static int b53_serdes_force_link(struct b53_pcs *priv, int speed, int duplex)
+{
+	struct b53_device *dev = priv->dev;
+	u8 lane = priv->lane;
+	u16 bmcr = mii_bmcr_encode_fixed(speed, duplex);
+	u16 mask = BMCR_SPEED100 | BMCR_SPEED1000 | BMCR_FULLDPLX;
+	int old, misc, rx, fifo, ret, err;
+
+	old = b53_serdes_read(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
+			      SERDES_MII_BLK);
+	if (old < 0)
+		return old;
+	misc = b53_serdes_read(dev, lane, B53_SERDES_DIGITAL_MISC1,
+			       SERDES_DIGITAL_BLK);
+	if (misc < 0)
+		return misc;
+	rx = b53_serdes_read(dev, lane, B53_SERDES_RX_CONTROL, SERDES_RX_BLK);
+	if (rx < 0)
+		return rx;
+	fifo = b53_serdes_read(dev, lane, B53_SERDES_DIGITAL_CONTROL(3),
+			       SERDES_DIGITAL_BLK);
+	if (fifo < 0)
+		return fifo;
+
+	if ((old & mask) == bmcr && !(misc & FORCE_SPEED_MASK) &&
+	    !(rx & RX_SEQ_START) && !(fifo & TX_FIFO_RST))
+		return 0;
+
+	/* Hold the receiver and TX FIFO while switching the forced speed,
+	 * following the downstream robo SerDes programming sequence.
+	 */
+	ret = b53_serdes_modify(dev, lane, B53_SERDES_RX_CONTROL,
+				SERDES_RX_BLK, RX_SEQ_START, RX_SEQ_START);
+	if (ret < 0)
+		goto release;
+
+	ret = b53_serdes_modify(dev, lane, B53_SERDES_DIGITAL_CONTROL(3),
+				SERDES_DIGITAL_BLK, TX_FIFO_RST, TX_FIFO_RST);
+	if (ret < 0)
+		goto release;
+
+	ret = b53_serdes_modify(dev, lane, B53_SERDES_DIGITAL_MISC1,
+				SERDES_DIGITAL_BLK, FORCE_SPEED_MASK, 0);
+	if (ret >= 0)
+		ret = b53_serdes_modify(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
+					SERDES_MII_BLK, mask, bmcr);
+release:
+	/* A failed write may have reached the device. Release both holds. */
+	err = b53_serdes_modify(dev, lane, B53_SERDES_RX_CONTROL,
+				SERDES_RX_BLK, RX_SEQ_START, 0);
+	if (ret >= 0)
+		ret = err;
+	err = b53_serdes_modify(dev, lane, B53_SERDES_DIGITAL_CONTROL(3),
+				SERDES_DIGITAL_BLK, TX_FIFO_RST, 0);
+	if (ret >= 0)
+		ret = err;
+
+	return ret < 0 ? ret : 1;
+}
+
 static int b53_serdes_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 			     phy_interface_t interface,
 			     const unsigned long *advertising,
 			     bool permit_pause_to_mac)
 {
-	struct b53_device *dev = pcs_to_b53_pcs(pcs)->dev;
-	u8 lane = pcs_to_b53_pcs(pcs)->lane;
-	int reg;
+	struct b53_pcs *priv = pcs_to_b53_pcs(pcs);
+	struct b53_device *dev = priv->dev;
+	u8 lane = priv->lane;
+	int adv, ret, changed;
+	u16 ctrl, bmcr;
 
-	reg = b53_serdes_read(dev, lane, B53_SERDES_DIGITAL_CONTROL(1),
-			      SERDES_DIGITAL_BLK);
-	if (reg < 0)
-		return reg;
+	if (!test_bit(interface, pcs->supported_interfaces))
+		return -EINVAL;
 
-	if (interface == PHY_INTERFACE_MODE_1000BASEX)
-		reg |= FIBER_MODE_1000X;
-	else
-		reg &= ~FIBER_MODE_1000X;
-	return b53_serdes_write(dev, lane, B53_SERDES_DIGITAL_CONTROL(1),
-				SERDES_DIGITAL_BLK, reg);
+	adv = phylink_mii_c22_pcs_encode_advertisement(interface, advertising);
+	if (adv < 0)
+		return adv;
+
+	ctrl = interface == PHY_INTERFACE_MODE_1000BASEX ? FIBER_MODE_1000X : 0;
+	/* Select the protocol explicitly and act as the MAC in SGMII mode. */
+	ret = b53_serdes_modify(dev, lane, B53_SERDES_DIGITAL_CONTROL(1),
+				SERDES_DIGITAL_BLK,
+				FIBER_MODE_1000X | AUTODET_EN | SGMII_MASTER_MODE,
+				ctrl);
+	if (ret < 0)
+		return ret;
+	changed = ret;
+
+	ret = b53_serdes_modify(dev, lane, B53_SERDES_MII_REG(MII_ADVERTISE),
+				SERDES_MII_BLK, 0xffff, adv);
+	if (ret < 0)
+		return ret;
+	changed |= ret;
+
+	if (interface == PHY_INTERFACE_MODE_1000BASEX &&
+	    neg_mode != PHYLINK_PCS_NEG_INBAND_ENABLED) {
+		/* The baud rate must be set before waiting for PCS link-up. */
+		ret = b53_serdes_force_link(priv, SPEED_1000, DUPLEX_FULL);
+	} else {
+		ret = b53_serdes_modify(dev, lane, B53_SERDES_DIGITAL_MISC1,
+					SERDES_DIGITAL_BLK, FORCE_SPEED_MASK, 0);
+	}
+	if (ret < 0)
+		return ret;
+	changed |= ret;
+
+	bmcr = neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED ? BMCR_ANENABLE : 0;
+	/* phylink requests Clause 37 restarts separately, but not SGMII. */
+	if (bmcr && changed && interface == PHY_INTERFACE_MODE_SGMII)
+		bmcr |= BMCR_ANRESTART;
+	ret = b53_serdes_modify(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
+				SERDES_MII_BLK,
+				BMCR_ANENABLE | BMCR_ISOLATE | BMCR_ANRESTART, bmcr);
+	if (ret < 0)
+		return ret;
+
+	return changed | ret;
 }
 
 static void b53_serdes_an_restart(struct phylink_pcs *pcs)
 {
-	struct b53_device *dev = pcs_to_b53_pcs(pcs)->dev;
-	u8 lane = pcs_to_b53_pcs(pcs)->lane;
-	int reg;
+	struct b53_pcs *priv = pcs_to_b53_pcs(pcs);
+	int ret;
 
-	reg = b53_serdes_read(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
-			      SERDES_MII_BLK);
-	if (reg < 0)
-		goto out;
+	ret = b53_serdes_modify(priv->dev, priv->lane,
+				B53_SERDES_MII_REG(MII_BMCR), SERDES_MII_BLK,
+				BMCR_ANRESTART, BMCR_ANRESTART);
+	b53_serdes_error(priv->dev, priv->lane, ret);
+}
 
-	reg |= BMCR_ANRESTART;
-	reg = b53_serdes_write(dev, lane, B53_SERDES_MII_REG(MII_BMCR),
-			       SERDES_MII_BLK, reg);
-out:
-	b53_serdes_error(dev, lane, reg);
+static void b53_serdes_link_up(struct phylink_pcs *pcs, unsigned int neg_mode,
+			       phy_interface_t interface, int speed, int duplex)
+{
+	struct b53_pcs *priv = pcs_to_b53_pcs(pcs);
+	int ret;
+
+	if (interface != PHY_INTERFACE_MODE_SGMII ||
+	    neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+		return;
+
+	ret = b53_serdes_force_link(priv, speed, duplex);
+	b53_serdes_error(priv->dev, priv->lane, ret);
 }
 
 static void b53_serdes_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
@@ -259,11 +359,13 @@ static void b53_serdes_disable(struct phylink_pcs *pcs)
 }
 
 static const struct phylink_pcs_ops b53_pcs_ops = {
+	.pcs_inband_caps = b53_serdes_inband_caps,
 	.pcs_enable = b53_serdes_enable,
 	.pcs_disable = b53_serdes_disable,
 	.pcs_get_state = b53_serdes_get_state,
 	.pcs_config = b53_serdes_config,
 	.pcs_an_restart = b53_serdes_an_restart,
+	.pcs_link_up = b53_serdes_link_up,
 };
 
 void b53_serdes_phylink_get_caps(struct b53_device *dev, int port,
