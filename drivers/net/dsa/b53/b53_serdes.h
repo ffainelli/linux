@@ -119,8 +119,13 @@ struct phylink_pcs *b53_serdes_phylink_mac_select_pcs(struct b53_device *dev,
 void b53_serdes_phylink_get_caps(struct b53_device *dev, int port,
 				 struct phylink_config *config);
 #if IS_ENABLED(CONFIG_B53_SERDES)
+void b53_serdes_link_change(struct b53_device *dev, int port);
 int b53_serdes_init(struct b53_device *dev, int port);
 #else
+static inline void b53_serdes_link_change(struct b53_device *dev, int port)
+{
+}
+
 static inline int b53_serdes_init(struct b53_device *dev, int port)
 {
 	return -ENODEV;
