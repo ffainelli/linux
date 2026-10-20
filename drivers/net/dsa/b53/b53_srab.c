@@ -453,7 +453,7 @@ static void b53_srab_phylink_get_caps(struct b53_device *dev, int port,
 	case PHY_INTERFACE_MODE_SGMII:
 #if IS_ENABLED(CONFIG_B53_SERDES)
 		/* If p->mode indicates SGMII mode, that essentially means we
-		 * are using a serdes. As the serdes for the capabilities.
+		 * are using a SerDes. Ask it for the supported interfaces.
 		 */
 		b53_serdes_phylink_get_caps(dev, port, config);
 #endif
@@ -588,8 +588,11 @@ static void b53_srab_mux_init(struct platform_device *pdev)
 		case MUX_CONFIG_SGMII:
 			p->mode = PHY_INTERFACE_MODE_SGMII;
 			ret = b53_serdes_init(dev, port);
-			if (ret)
+			if (ret) {
+				dev_err(dev->dev, "port %d SerDes unavailable: %pe\n",
+					port, ERR_PTR(ret));
 				continue;
+			}
 			break;
 		case MUX_CONFIG_MII_LITE:
 			p->mode = PHY_INTERFACE_MODE_MII;
