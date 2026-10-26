@@ -985,6 +985,7 @@ static int b53_switch_reset(struct b53_device *dev)
 {
 	unsigned int timeout = 1000;
 	u8 mgmt, reg;
+	int ret;
 
 	b53_switch_reset_gpio(dev);
 
@@ -1000,17 +1001,25 @@ static int b53_switch_reset(struct b53_device *dev)
 	 */
 	if (dev->chip_id == BCM58XX_DEVICE_ID ||
 	    dev->chip_id == BCM583XX_DEVICE_ID) {
-		b53_read8(dev, B53_CTRL_PAGE, B53_SOFTRESET, &reg);
-		reg |= SW_RST | EN_SW_RST | EN_CH_RST;
-		b53_write8(dev, B53_CTRL_PAGE, B53_SOFTRESET, reg);
+		ret = b53_read8(dev, B53_CTRL_PAGE, B53_SOFTRESET, &reg);
+		if (ret)
+			return ret;
 
-		do {
-			b53_read8(dev, B53_CTRL_PAGE, B53_SOFTRESET, &reg);
+		reg |= SW_RST | EN_SW_RST | EN_CH_RST;
+		ret = b53_write8(dev, B53_CTRL_PAGE, B53_SOFTRESET, reg);
+		if (ret)
+			return ret;
+
+		for (; timeout; timeout--) {
+			ret = b53_read8(dev, B53_CTRL_PAGE, B53_SOFTRESET, &reg);
+			if (ret)
+				return ret;
+
 			if (!(reg & SW_RST))
 				break;
 
 			usleep_range(1000, 2000);
-		} while (timeout-- > 0);
+		}
 
 		if (timeout == 0) {
 			dev_err(dev->dev,
