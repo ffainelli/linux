@@ -121,6 +121,8 @@ struct b53_pcs {
 struct b53_port {
 	u16		vlan_ctl_mask;
 	u16		pvid;
+	/* References to each egress/ingress mirror source mask bit. */
+	unsigned int	mirror_count[2];
 	struct ethtool_keee eee;
 };
 
