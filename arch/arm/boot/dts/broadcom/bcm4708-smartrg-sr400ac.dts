@@ -114,6 +114,18 @@
 	};
 };
 
+&axi_pmu_m0 {
+	status = "okay";
+};
+
+&axi_pmu_m1 {
+	status = "okay";
+};
+
+&axi_pmu_acp {
+	status = "okay";
+};
+
 &spi_nor {
 	status = "okay";
 };
