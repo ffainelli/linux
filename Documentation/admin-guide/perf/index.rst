@@ -31,3 +31,4 @@ Performance monitor support
    ampere_cspmu
    mrvl-pem-pmu
    fujitsu_uncore_pmu
+   bcm5301x-axi-pmu

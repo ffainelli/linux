@@ -6,6 +6,18 @@
 menu "Performance monitor support"
 	depends on PERF_EVENTS
 
+config BCM5301X_AXI_PMU
+	tristate "Broadcom BCM5301X AXI Trace Module PMU"
+	depends on ARCH_BCM_5301X || COMPILE_TEST
+	depends on OF
+	help
+	  Support system-wide perf counting on the BCM5301X AXI Trace Modules
+	  monitoring the PL310 master interfaces and ACP. Supports commands,
+	  beats, active/stall cycles, and outstanding-command cycles. Sampling
+	  and transaction trace capture are not supported.
+
+	  If compiled as a module, it will be called bcm5301x_axi_pmu.
+
 config ARM_CCI_PMU
 	tristate "ARM CCI PMU driver"
 	depends on (ARM && CPU_V7) || ARM64
