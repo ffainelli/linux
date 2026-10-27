@@ -1354,6 +1354,7 @@ static void b53_teardown(struct dsa_switch *ds)
 static void b53_force_link(struct b53_device *dev, int port, int link)
 {
 	u8 reg, val, off;
+	int ret;
 
 	/* Override the port settings */
 	if (port == dev->imp_port) {
@@ -1366,20 +1367,27 @@ static void b53_force_link(struct b53_device *dev, int port, int link)
 		val = GMII_PO_EN;
 	}
 
-	b53_read8(dev, B53_CTRL_PAGE, off, &reg);
+	ret = b53_read8(dev, B53_CTRL_PAGE, off, &reg);
+	if (ret)
+		goto error;
 	reg |= val;
 	if (link)
 		reg |= PORT_OVERRIDE_LINK;
 	else
 		reg &= ~PORT_OVERRIDE_LINK;
-	b53_write8(dev, B53_CTRL_PAGE, off, reg);
+	ret = b53_write8(dev, B53_CTRL_PAGE, off, reg);
+error:
+	if (ret)
+		dev_err_ratelimited(dev->dev, "port %d link override failed: %pe\n",
+				    port, ERR_PTR(ret));
 }
 
-static void b53_force_port_config(struct b53_device *dev, int port,
-				  int speed, int duplex,
-				  bool tx_pause, bool rx_pause)
+static int b53_force_port_config(struct b53_device *dev, int port,
+				 int speed, int duplex,
+				 bool tx_pause, bool rx_pause)
 {
 	u8 reg, val, off, speed2000;
+	int ret;
 
 	/* Override the port settings */
 	if (port == dev->imp_port) {
@@ -1387,14 +1395,16 @@ static void b53_force_port_config(struct b53_device *dev, int port,
 		val = PORT_OVERRIDE_EN;
 		speed2000 = PORT_OVERRIDE_SPEED_2000M;
 	} else if (is5325(dev)) {
-		return;
+		return 0;
 	} else {
 		off = B53_GMII_PORT_OVERRIDE_CTRL(port);
 		val = GMII_PO_EN;
 		speed2000 = GMII_PO_SPEED_2000M;
 	}
 
-	b53_read8(dev, B53_CTRL_PAGE, off, &reg);
+	ret = b53_read8(dev, B53_CTRL_PAGE, off, &reg);
+	if (ret)
+		goto error;
 	reg |= val;
 	if (duplex == DUPLEX_FULL)
 		reg |= PORT_OVERRIDE_FULL_DUPLEX;
@@ -1420,7 +1430,7 @@ static void b53_force_port_config(struct b53_device *dev, int port,
 		break;
 	default:
 		dev_err(dev->dev, "unknown speed: %d\n", speed);
-		return;
+		return -EINVAL;
 	}
 
 	if (is5325(dev))
@@ -1442,7 +1452,12 @@ static void b53_force_port_config(struct b53_device *dev, int port,
 			reg |= PORT_OVERRIDE_TX_FLOW;
 	}
 
-	b53_write8(dev, B53_CTRL_PAGE, off, reg);
+	ret = b53_write8(dev, B53_CTRL_PAGE, off, reg);
+error:
+	if (ret)
+		dev_err_ratelimited(dev->dev, "port %d configuration override failed: %pe\n",
+				    port, ERR_PTR(ret));
+	return ret;
 }
 
 static void b53_adjust_63xx_rgmii(struct dsa_switch *ds, int port,
@@ -1665,8 +1680,9 @@ static void b53_phylink_mac_link_up(struct phylink_config *config,
 		p->eee_enabled = b53_eee_init(ds, port, phydev);
 
 		if (is63xx(dev) && in_range(port, B53_63XX_RGMII0, 4)) {
-			b53_force_port_config(dev, port, speed, duplex,
-					      tx_pause, rx_pause);
+			if (b53_force_port_config(dev, port, speed, duplex,
+						  tx_pause, rx_pause))
+				return;
 			b53_force_link(dev, port, true);
 		}
 
@@ -1678,8 +1694,9 @@ static void b53_phylink_mac_link_up(struct phylink_config *config,
 		if (is5301x(dev) && dsa_is_cpu_port(ds, port))
 			tx_pause = rx_pause = true;
 
-		b53_force_port_config(dev, port, speed, duplex,
-				      tx_pause, rx_pause);
+		if (b53_force_port_config(dev, port, speed, duplex,
+					  tx_pause, rx_pause))
+			return;
 		b53_force_link(dev, port, true);
 		return;
 	}
