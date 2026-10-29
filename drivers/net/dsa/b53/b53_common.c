@@ -564,6 +564,8 @@ static void b53_port_set_ucast_flood(struct b53_device *dev, int port,
 {
 	u16 uc;
 
+	dev->ports[port].ucast_flood = unicast;
+
 	if (is5325(dev)) {
 		if (port == B53_CPU_PORT_25)
 			port = B53_CPU_PORT;
@@ -588,6 +590,8 @@ static void b53_port_set_mcast_flood(struct b53_device *dev, int port,
 				     bool multicast)
 {
 	u16 mc;
+
+	dev->ports[port].mcast_flood = multicast;
 
 	if (is5325(dev)) {
 		if (port == B53_CPU_PORT_25)
@@ -638,6 +642,8 @@ static void b53_port_set_isolated(struct b53_device *dev, int port,
 {
 	u8 offset;
 	u16 reg;
+
+	dev->ports[port].isolated = isolated;
 
 	if (is5325(dev))
 		offset = B53_PROTECTED_PORT_SEL_25;
@@ -698,10 +704,33 @@ int b53_setup_port(struct dsa_switch *ds, int port)
 }
 EXPORT_SYMBOL(b53_setup_port);
 
-int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
+/* Re-apply the software state of a port to the hardware. Used when the port
+ * is enabled again, or after the switch has been reset (e.g.: system resume)
+ * and the registers are back to their default values.
+ */
+void b53_restore_port_state(struct dsa_switch *ds, int port)
 {
 	struct b53_device *dev = ds->priv;
 	struct b53_port *p = &dev->ports[port];
+
+	b53_port_set_ucast_flood(dev, port, p->ucast_flood);
+	b53_port_set_mcast_flood(dev, port, p->mcast_flood);
+	b53_port_set_learning(dev, port, p->learning);
+	b53_port_set_isolated(dev, port, p->isolated);
+
+	/* Bridged ports use the basic mode, standalone ports trap unknown SA
+	 * to the CPU port, see b53_br_join() and b53_br_leave().
+	 */
+	if (dsa_is_user_port(ds, port))
+		b53_set_eap_mode(dev, port,
+				 dsa_port_bridge_dev_get(dsa_to_port(ds, port)) ?
+				 EAP_MODE_BASIC : EAP_MODE_SIMPLIFIED);
+}
+EXPORT_SYMBOL(b53_restore_port_state);
+
+int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
+{
+	struct b53_device *dev = ds->priv;
 	unsigned int cpu_port;
 	int ret = 0;
 	u16 pvlan;
@@ -714,7 +743,7 @@ int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
 	if (dev->ops->phy_enable)
 		dev->ops->phy_enable(dev, port);
 
-	b53_port_set_learning(dev, port, p->learning);
+	b53_restore_port_state(ds, port);
 
 	if (dev->ops->irq_enable)
 		ret = dev->ops->irq_enable(dev, port);
