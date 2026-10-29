@@ -348,7 +348,7 @@ static void b53_set_eap_mode(struct b53_device *dev, int port, int mode)
 	b53_write64(dev, B53_EAP_PAGE, B53_PORT_EAP_CONF(port), eap_conf);
 }
 
-static void b53_set_forwarding(struct b53_device *dev, int enable)
+void b53_set_forwarding(struct b53_device *dev, int enable)
 {
 	u8 mgmt;
 
@@ -379,6 +379,7 @@ static void b53_set_forwarding(struct b53_device *dev, int enable)
 		b53_write8(dev, B53_CTRL_PAGE, B53_IP_MULTICAST_CTRL, mgmt);
 	}
 }
+EXPORT_SYMBOL(b53_set_forwarding);
 
 static void b53_enable_vlan(struct b53_device *dev, int port, bool enable,
 			    bool enable_filtering)

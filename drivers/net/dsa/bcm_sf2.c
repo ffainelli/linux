@@ -972,6 +972,7 @@ static int bcm_sf2_sw_suspend(struct dsa_switch *ds)
 static int bcm_sf2_sw_resume(struct dsa_switch *ds)
 {
 	struct bcm_sf2_priv *priv = bcm_sf2_to_priv(ds);
+	unsigned int port;
 	int ret;
 
 	if (!priv->wol_ports_mask)
@@ -997,6 +998,14 @@ static int bcm_sf2_sw_resume(struct dsa_switch *ds)
 		bcm_sf2_gphy_enable_set(ds, true);
 
 	ds->ops->setup(ds);
+
+	/* User ports were restored by bcm_sf2_port_setup(), restore the CPU
+	 * ports which were reset along with the rest of the switch.
+	 */
+	for (port = 0; port < ds->num_ports; port++) {
+		if (dsa_is_cpu_port(ds, port))
+			b53_restore_port_state(ds, port);
+	}
 
 	return 0;
 }
@@ -1072,6 +1081,7 @@ static int bcm_sf2_sw_setup(struct dsa_switch *ds)
 	}
 
 	b53_configure_vlan(ds);
+	b53_set_forwarding(priv->dev, 1);
 	bcm_sf2_enable_acb(ds);
 
 	return b53_setup_devlink_resources(ds);
