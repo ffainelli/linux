@@ -5,7 +5,10 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/ata_platform.h>
+#include <linux/gpio/property.h>
 #include <linux/property.h>
+
+#include <dt-bindings/gpio/gpio.h>
 
 #include <asm/sibyte/board.h>
 #include <asm/sibyte/sb1250_genbus.h>
@@ -140,28 +143,74 @@ static int __init sb1250_device_init(void)
 }
 device_initcall(sb1250_device_init);
 
-#if defined(CONFIG_SIBYTE_SB1250) || defined(CONFIG_SIBYTE_BCM112X)
-static const struct software_node sb1250_gpio_node = {
-	.name = "sb1250-gpio",
+static const struct software_node sibyte_gpio_node = {
+	.name = "sibyte-gpio",
 };
 
-static const struct resource sb1250_gpio_resource = {
+static const struct resource sibyte_gpio_resource = {
 	.start = A_GPIO_BASE,
 	.end = A_GPIO_BASE + R_GPIO_PIN_SET + sizeof(u64) - 1,
 	.flags = IORESOURCE_MEM,
 };
 
-static int __init sb1250_gpio_device_init(void)
+static int __init sibyte_gpio_device_init(void)
 {
 	const struct platform_device_info info = {
-		.name = "sb1250-gpio",
+		.name = "sibyte-gpio",
 		.id = PLATFORM_DEVID_NONE,
-		.res = &sb1250_gpio_resource,
+		.res = &sibyte_gpio_resource,
 		.num_res = 1,
-		.swnode = &sb1250_gpio_node,
+		.swnode = &sibyte_gpio_node,
 	};
 
 	return PTR_ERR_OR_ZERO(platform_device_register_full(&info));
 }
-arch_initcall(sb1250_gpio_device_init);
+arch_initcall(sibyte_gpio_device_init);
+
+#ifdef CONFIG_SIBYTE_SENTOSA
+static const struct software_node sentosa_leds_node = {
+	.name = "sentosa-leds",
+};
+
+static const struct property_entry sentosa_debug_led_properties[] = {
+	PROPERTY_ENTRY_STRING("label", "sentosa:green:debug"),
+	PROPERTY_ENTRY_STRING("default-state", "off"),
+	PROPERTY_ENTRY_GPIO("gpios", &sibyte_gpio_node, K_GPIO_DBG_LED,
+			    GPIO_ACTIVE_HIGH),
+	{ }
+};
+
+static const struct software_node sentosa_debug_led_node = {
+	.name = "debug",
+	.parent = &sentosa_leds_node,
+	.properties = sentosa_debug_led_properties,
+};
+
+static const struct software_node * const sentosa_led_nodes[] = {
+	&sentosa_leds_node,
+	&sentosa_debug_led_node,
+	NULL,
+};
+
+static int __init sentosa_leds_init(void)
+{
+	const struct platform_device_info info = {
+		.name = "leds-gpio",
+		.id = PLATFORM_DEVID_NONE,
+		.swnode = &sentosa_leds_node,
+	};
+	struct platform_device *pdev;
+	int ret;
+
+	ret = software_node_register_node_group(sentosa_led_nodes);
+	if (ret)
+		return ret;
+
+	pdev = platform_device_register_full(&info);
+	if (IS_ERR(pdev))
+		software_node_unregister_node_group(sentosa_led_nodes);
+
+	return PTR_ERR_OR_ZERO(pdev);
+}
+device_initcall(sentosa_leds_init);
 #endif
