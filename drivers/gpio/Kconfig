@@ -711,6 +711,19 @@ config GPIO_SAMA5D2_PIOBU
 	  The difference from regular GPIOs is that they
 	  maintain their value during backup/self-refresh.
 
+config GPIO_SIBYTE
+	tristate "Broadcom SiByte GPIO support"
+	depends on SIBYTE_SB1xxx_SOC
+	default y if SIBYTE_SENTOSA
+	help
+	  Support the 16 GPIO pins on Broadcom SiByte SB1250, BCM112x,
+	  BCM1255, BCM1280, BCM1455 and BCM1480 processors. Pins assigned
+	  to alternate functions by the hardware straps are excluded.
+	  GPIO interrupts are not supported.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called gpio-sibyte.
+
 config GPIO_SIFIVE
 	tristate "SiFive GPIO support"
 	depends on OF

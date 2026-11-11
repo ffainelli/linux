@@ -5,6 +5,7 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/ata_platform.h>
+#include <linux/property.h>
 
 #include <asm/sibyte/board.h>
 #include <asm/sibyte/sb1250_genbus.h>
@@ -138,3 +139,29 @@ static int __init sb1250_device_init(void)
 	return ret;
 }
 device_initcall(sb1250_device_init);
+
+#if defined(CONFIG_SIBYTE_SB1250) || defined(CONFIG_SIBYTE_BCM112X)
+static const struct software_node sb1250_gpio_node = {
+	.name = "sb1250-gpio",
+};
+
+static const struct resource sb1250_gpio_resource = {
+	.start = A_GPIO_BASE,
+	.end = A_GPIO_BASE + R_GPIO_PIN_SET + sizeof(u64) - 1,
+	.flags = IORESOURCE_MEM,
+};
+
+static int __init sb1250_gpio_device_init(void)
+{
+	const struct platform_device_info info = {
+		.name = "sb1250-gpio",
+		.id = PLATFORM_DEVID_NONE,
+		.res = &sb1250_gpio_resource,
+		.num_res = 1,
+		.swnode = &sb1250_gpio_node,
+	};
+
+	return PTR_ERR_OR_ZERO(platform_device_register_full(&info));
+}
+arch_initcall(sb1250_gpio_device_init);
+#endif
