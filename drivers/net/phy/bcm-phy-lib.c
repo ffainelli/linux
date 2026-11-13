@@ -708,7 +708,10 @@ static int _bcm_phy_load_values(struct phy_device *phydev,
 	return __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xef, 0);
 }
 
-static int _bcm_phy_cable_test_init(struct phy_device *phydev)
+/* Must be called with the MDIO bus lock held and legacy expansion register
+ * access enabled.
+ */
+static int __bcm_phy_cable_test_init(struct phy_device *phydev)
 {
 	struct __bcm_phy_regs init_regs[] = {
 		{ 0xc7, 0xA01A },
@@ -750,16 +753,14 @@ static int _bcm_phy_cable_test_init(struct phy_device *phydev)
 	unsigned int i;
 	int ret;
 
-	ret = genphy_soft_reset(phydev);
-	if (ret < 0)
-		return ret;
-
-	phy_lock_mdio_bus(phydev);
-
-	/* Disable ECD to load parameters */
+	/* Disable ECD to load parameters. Note that the reference sequence
+	 * soft-resets the PHY first, but that is only needed for the Broadcom
+	 * DVT process and would discard the configuration done at
+	 * config_init() time.
+	 */
 	ret = __bcm_phy_write_exp(phydev, BCM54XX_EXP_ECD_CTRL, 0);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	/* Prepare for loading value */
 	for (i = 0; i < ARRAY_SIZE(init_regs); i++) {
@@ -767,20 +768,20 @@ static int _bcm_phy_cable_test_init(struct phy_device *phydev)
 					  init_regs[i].reg,
 					  init_regs[i].val);
 		if (ret < 0)
-			goto out;
+			return ret;
 	}
 
 	/* Load page 1 values */
 	ret = _bcm_phy_load_values(phydev, page1_init_regs,
 				   ARRAY_SIZE(page1_init_regs), 1);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	/* Load page 2 values */
 	ret = _bcm_phy_load_values(phydev, page2_init_regs,
 				   ARRAY_SIZE(page2_init_regs), 2);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	/* Load the page 0 values */
 	for (i = 0; i < ARRAY_SIZE(page0_init_regs); i++) {
@@ -788,36 +789,26 @@ static int _bcm_phy_cable_test_init(struct phy_device *phydev)
 					  page0_init_regs[i].reg,
 					  page0_init_regs[i].val);
 		if (ret < 0)
-			goto out;
+			return ret;
 	}
 
 	/* Finish loading */
 	ret = __bcm_phy_write_exp(phydev, MII_BCM54XX_EXP_SEL_ER + 0xcd, 0xd0);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	/* Dummy read to flush the ECD register */
 	ret = __bcm_phy_read_exp(phydev, BCM54XX_EXP_ECD_CTRL);
 	if (ret < 0)
-		goto out;
+		return ret;
 
-	ret = __bcm_phy_write_exp(phydev, BCM54XX_EXP_ECD_CTRL, 0);
-	if (ret < 0)
-		goto out;
-
-out:
-	phy_unlock_mdio_bus(phydev);
-	return ret;
+	return __bcm_phy_write_exp(phydev, BCM54XX_EXP_ECD_CTRL, 0);
 }
 
 static int _bcm_phy_cable_test_start(struct phy_device *phydev, bool is_rdb)
 {
 	u16 mask, set;
 	int ret;
-
-	ret = _bcm_phy_cable_test_init(phydev);
-	if (ret < 0)
-		return ret;
 
 	/* Auto-negotiation must be enabled for cable diagnostics to work, but
 	 * don't advertise any capabilities.
@@ -832,6 +823,10 @@ static int _bcm_phy_cable_test_start(struct phy_device *phydev, bool is_rdb)
 		if (ret)
 			goto out;
 	}
+
+	ret = __bcm_phy_cable_test_init(phydev);
+	if (ret < 0)
+		goto out;
 
 	mask = BCM54XX_ECD_CTRL_CROSS_SHORT_DIS | BCM54XX_ECD_CTRL_UNIT_MASK;
 	set = BCM54XX_ECD_CTRL_RUN | BCM54XX_ECD_CTRL_BREAK_LINK |
@@ -888,7 +883,8 @@ static int bcm_phy_report_length(struct phy_device *phydev, int pair)
 	if (val < 0)
 		return val;
 
-	if (val == BCM54XX_ECD_LENGTH_RESULTS_INVALID)
+	if (val == BCM54XX_ECD_LENGTH_RESULTS_INVALID ||
+	    val == BCM54XX_ECD_LENGTH_RESULTS_FAILED)
 		return 0;
 
 	ethnl_cable_test_fault_length(phydev, pair, val);
