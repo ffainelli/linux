@@ -124,6 +124,46 @@ static noinstr u64 arch_counter_get_cntvct(void)
 	return __arch_counter_get_cntvct();
 }
 
+#ifdef CONFIG_BCM53573_ERRATUM_COUNTER
+/*
+ * BCM53573 erratum: the system counter can return a value lower than a
+ * previous read (observed as a one tick step backwards on both CNTPCT and
+ * CNTVCT). Make the counter monotonic by never returning a value lower than
+ * the last one handed out. The last value is updated with a cmpxchg so that
+ * readers interrupting each other (e.g. from the timer interrupt) cannot
+ * make it go backwards.
+ */
+static bool bcm53573_counter_wa __ro_after_init;
+static atomic64_t bcm53573_last_count = ATOMIC64_INIT(0);
+
+static __always_inline u64 bcm53573_counter_monotonic(u64 now)
+{
+	u64 prev = arch_atomic64_read(&bcm53573_last_count);
+	u64 old;
+
+	for (;;) {
+		if ((s64)(now - prev) <= 0)
+			return prev;
+
+		old = arch_atomic64_cmpxchg_relaxed(&bcm53573_last_count, prev, now);
+		if (old == prev)
+			return now;
+
+		prev = old;
+	}
+}
+
+static noinstr u64 bcm53573_counter_get_cntpct(void)
+{
+	return bcm53573_counter_monotonic(__arch_counter_get_cntpct());
+}
+
+static noinstr u64 bcm53573_counter_get_cntvct(void)
+{
+	return bcm53573_counter_monotonic(__arch_counter_get_cntvct());
+}
+#endif /* CONFIG_BCM53573_ERRATUM_COUNTER */
+
 /*
  * Default to cp15 based access because arm64 uses this function for
  * sched_clock() before DT is probed and the cp15 method is guaranteed
@@ -928,6 +968,20 @@ static void __init arch_counter_register(void)
 		}
 	}
 
+#ifdef CONFIG_BCM53573_ERRATUM_COUNTER
+	if (bcm53573_counter_wa) {
+		if (arch_timer_uses_ppi == ARCH_TIMER_VIRT_PPI) {
+			rd = bcm53573_counter_get_cntvct;
+			scr = bcm53573_counter_get_cntvct;
+		} else {
+			rd = bcm53573_counter_get_cntpct;
+			scr = bcm53573_counter_get_cntpct;
+		}
+		/* The vDSO reads the raw counter, do not let it do that */
+		vdso_default = VDSO_CLOCKMODE_NONE;
+	}
+#endif
+
 	arch_timer_read_counter = rd;
 	clocksource_counter.vdso_clock_mode = vdso_default;
 
@@ -1187,6 +1241,13 @@ static int __init arch_timer_of_init(struct device_node *np)
 
 	/* Check for globally applicable workarounds */
 	arch_timer_check_ool_workaround(ate_match_dt, np);
+
+#ifdef CONFIG_BCM53573_ERRATUM_COUNTER
+	if (of_property_read_bool(np, "brcm,erratum-bcm53573-counter")) {
+		bcm53573_counter_wa = true;
+		pr_info("Enabling workaround for BCM53573 non-monotonic counter\n");
+	}
+#endif
 
 	/*
 	 * If we cannot rely on firmware initializing the timer registers then

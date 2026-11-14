@@ -388,6 +388,16 @@ config ARM64_ERRATUM_858921
 	  The workaround will be dynamically enabled when an affected
 	  core is detected.
 
+config BCM53573_ERRATUM_COUNTER
+	bool "Workaround for Broadcom BCM53573 non-monotonic system counter"
+	default y
+	depends on ARM_ARCH_TIMER && ARM && ARCH_BCM_53573
+	help
+	  This option enables a workaround for the BCM53573 (and derivatives)
+	  system counter which may occasionally return a value lower than a
+	  previous read. The workaround will only be active if the
+	  brcm,erratum-bcm53573-counter property is found in the timer node.
+
 config SUN50I_ERRATUM_UNKNOWN1
 	bool "Workaround for Allwinner A64 erratum UNKNOWN1"
 	default y
