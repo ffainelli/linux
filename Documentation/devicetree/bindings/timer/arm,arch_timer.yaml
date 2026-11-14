@@ -83,6 +83,14 @@ properties:
       return a value 32 beyond the correct value. This also affects writes to
       the tval registers, due to the implicit counter read.
 
+  brcm,erratum-bcm53573-counter:
+    type: boolean
+    description: Indicates the presence of a Broadcom BCM53573 (and derivatives
+      such as BCM47189) erratum, where the system counter, which is derived from
+      a slower clock domain, may occasionally return a value lower than the one
+      returned by a previous read (typically by one tick). Only supported for
+      32-bit systems.
+
   arm,cpu-registers-not-fw-configured:
     type: boolean
     description: Firmware does not initialize any of the generic timer CPU
